@@ -9,7 +9,7 @@ android {
 
     defaultConfig {
         applicationId "com.huluwa.localserver"
-        minSdk 21
+        minSdk 24        // Chaquopy 16 要求 >= 24
         targetSdk 34
         versionCode 1
         versionName "1.0"
