@@ -565,8 +565,8 @@ class Handler(BaseHTTPRequestHandler):
                     save_ud()
                     ud["7"]["war"].setdefault("now_drop", [])
                     ud["7"]["war"].setdefault("ta", {"id": m.get("id", 0)})
-                    ud["7"]["war"]["now_g"] = 14
-                    ud["7"]["war"]["now_i"] = 6
+                    # 进度指针交给客户端/结算逻辑推进，这里不再强制覆盖，
+                    # 否则清剧情后指针被顶到 14/6，"通关1-1却不解锁1-2" 这类问题会反复出现。
                     payload = {"msg": "ok", "returndata": ud}
 
                 elif t == 233:
@@ -711,7 +711,27 @@ class Handler(BaseHTTPRequestHandler):
                     payload = {"msg": "ok", "act": None, "returndata": {}}
 
                 elif t == 44445:
-                    # 战斗结算。客户端在本地算好掉落（info.prop = {propId: num}）发上来，
+    # ★ 把客户端上报的通关结果落库：gr_id=章节, in_id=关卡编号, isWin=1
+                    try:
+                        _g, _i = info.get("gr_id"), info.get("in_id")
+                        if info.get("isWin") == 1 and _g is not None and _i is not None:
+                            _key = "g%s_i%s" % (int(_g), int(_i))
+                            _st = UD.setdefault("6", {}).setdefault("story", {})
+                            _rec = _st.get(_key) or {}
+                            _rec["bastJudge"] = max(int(_rec.get("bastJudge") or 0), 1)
+                            _rr = _rec.setdefault("roles", {}).setdefault("all", {})
+                            _rr["winTimes"] = int(_rr.get("winTimes") or 0) + 1
+                            _rr.setdefault("failTimes", 0)
+                            _st[_key] = _rec
+                            # 进度指针推进到刚打的这一关
+                            _w = UD.setdefault("7", {}).setdefault("war", {})
+                            _w["now_g"] = int(_g)
+                            _w["now_i"] = int(_i)
+                            save_ud()
+                            log("[BATTLE] 记录通关 %s (bastJudge=%d)" % (_key, _rec["bastJudge"]))
+                    except Exception as _e:
+                        log("[BATTLE] 记录通关失败:", _e)
+                                        # 战斗结算。客户端在本地算好掉落（info.prop = {propId: num}）发上来，
                     # 单机版直接采信并写入背包，然后把同样的奖励回传 + 用 update 落库。
                     props = {}
                     win = 1
@@ -1292,8 +1312,11 @@ def reset_story():
                     if isinstance(sub, dict):
                         sub["winTimes"] = 0
             n += 1
+    w = UD.setdefault("7", {}).setdefault("war", {})
+    w["now_g"] = 0          # 进度指针回到 1-1，之后通关会自然推进
+    w["now_i"] = 0
     save_ud()
-    log("[UI] 剧情重放：已清零 %d 个关卡" % n)
+    log("[UI] 剧情重放：已清零 %d 个关卡，进度指针回到 0/0" % n)
     return n
 
 def restore_story():
@@ -1309,8 +1332,11 @@ def restore_story():
                     if isinstance(sub, dict):
                         sub["winTimes"] = 3
             n += 1
+    w = UD.setdefault("7", {}).setdefault("war", {})
+    w["now_g"] = 14
+    w["now_i"] = 6
     save_ud()
-    log("[UI] 已恢复全通关 %d 关" % n)
+    log("[UI] 已恢复全通关 %d 关，指针推到 14/6" % n)
     return n
 
 def set_role(idx):
