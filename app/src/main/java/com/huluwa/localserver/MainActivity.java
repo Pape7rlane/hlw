@@ -1,24 +1,25 @@
 package com.huluwa.localserver;
 
 import android.Manifest;
+import android.app.Activity;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.os.Build;
 import android.os.Bundle;
+import android.view.Gravity;
 import android.widget.Button;
 import android.widget.LinearLayout;
 import android.widget.TextView;
-import androidx.appcompat.app.AppCompatActivity;
 
 /**
  * 少年葫芦娃 · 单机服务端
  *
- * 这个 APK 里打包了一份 Python 服务端（Chaquopy），启动后在手机本地监听：
- *   HTTP 8080  —— 服务器列表 / 会话 / 配置 / 进关卡 / 战斗结算
- *   TCP  9000  —— 游戏二进制协议
- * 游戏本体连的就是 127.0.0.1，所以同机运行即可。
+ * 内置 Python 服务端（Chaquopy），启动后本机监听：
+ *   HTTP 8080 —— 服务器列表 / 会话 / 配置 / 进关卡 / 战斗结算
+ *   TCP  9000 —— 游戏二进制协议
+ * 游戏本体连 127.0.0.1，同机运行即可。
  */
-public class MainActivity extends AppCompatActivity {
+public class MainActivity extends Activity {
 
     private TextView status;
 
@@ -28,6 +29,7 @@ public class MainActivity extends AppCompatActivity {
 
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
+        root.setGravity(Gravity.TOP);
         int pad = (int) (16 * getResources().getDisplayMetrics().density);
         root.setPadding(pad, pad, pad, pad);
 
@@ -57,11 +59,10 @@ public class MainActivity extends AppCompatActivity {
 
         setContentView(root);
 
-        if (Build.VERSION.SDK_INT >= 33) {
-            if (checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)
-                    != PackageManager.PERMISSION_GRANTED) {
-                requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, 1);
-            }
+        if (Build.VERSION.SDK_INT >= 33
+                && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)
+                != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, 1);
         }
 
         startServer();
@@ -69,11 +70,8 @@ public class MainActivity extends AppCompatActivity {
 
     private void startServer() {
         Intent i = new Intent(this, ServerService.class);
-        if (Build.VERSION.SDK_INT >= 26) {
-            startForegroundService(i);
-        } else {
-            startService(i);
-        }
+        if (Build.VERSION.SDK_INT >= 26) startForegroundService(i);
+        else startService(i);
         status.setText("状态：启动中…\nHTTP 8080 / TCP 9000\n（保持本应用后台运行）");
     }
 }
