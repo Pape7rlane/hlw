@@ -17,21 +17,38 @@ jobs:
           distribution: temurin
           java-version: '17'
 
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
       - name: Set up Python 3.10 (Chaquopy buildPython)
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
 
-      # Gradle 必须固定在 8.x：AGP 8.5.2 不认识 Gradle 9（会崩 org/gradle/util/VersionNumber）
       - name: Setup Gradle 8.7
         uses: gradle/actions/setup-gradle@v3
         with:
           gradle-version: '8.7'
 
       - name: Build debug APK
-        run: gradle assembleDebug --no-daemon --stacktrace
+        run: |
+          set -o pipefail
+          gradle assembleDebug --no-daemon --stacktrace --info 2>&1 | tee build.log
+
+      # 失败时把日志尾部推到一个单独的 ci-log 分支，方便外部（不用 token）读取原因
+      - name: Publish failure log
+        if: failure()
+        run: |
+          git config user.name "ci"
+          git config user.email "ci@local"
+          { echo "=== last 300 lines of build.log ==="; tail -n 300 build.log 2>/dev/null || echo "(no build.log)"; } > ci_error.txt
+          git checkout -B ci-log
+          git add -f ci_error.txt
+          git commit -m "ci error log" || true
+          git push -f origin ci-log || echo "push ci-log failed"
 
       - name: Upload APK
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: huluwa-localserver-apk
