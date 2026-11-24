@@ -8,6 +8,9 @@ TCP  :9000  游戏包协议
 import json, zlib, struct, socket, threading, time, sys, os, traceback
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
+# 每章关数（模块级：进关卡算 next 时要用）
+CHAPTER_LEVELS_G = [8, 6, 7, 6, 5, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7]
+
 HTTP_PORT = int(os.environ.get("HLW_HTTP") or 8080)
 TCP_PORT  = int(os.environ.get("HLW_TCP") or 9000)
 HOST_STR  = "127.0.0.1"
@@ -534,7 +537,7 @@ class Handler(BaseHTTPRequestHandler):
                     # gearsystem / extatv 包内都有正版，绝不能 override（会写坏 Local Store）
                     # extatvBtnList 包内没有，缺它 EquipSystem.tryLoadDebugAsScript() 直接 #1009
                     payload = {"msg": "ok", "returndata": {
-                        "deleteCfgs": [], "updateCfgs": {},
+                        "deleteCfgs": [], "updateCfgs": {"roleCon": {"totalIdArr": [0, 1, 2, 3, 4, 5, 6], "rolerole0": {"name": "\u5927\u5a03", "url": "fighterg14011", "headPic": "0"}, "rolerole1": {"name": "\u4e8c\u5a03", "url": "fighterg14012", "headPic": "1"}, "rolerole2": {"name": "\u4e09\u5a03", "url": "fighterg14013", "headPic": "2"}, "rolerole3": {"name": "\u56db\u5a03", "url": "fighterg14014", "headPic": "3"}, "rolerole4": {"name": "\u4e94\u5a03", "url": "fighterg14015", "headPic": "4"}, "rolerole5": {"name": "\u516d\u5a03", "url": "fighterg14016", "headPic": "5"}, "rolerole6": {"name": "\u4e03\u5a03", "url": "fighterg14017", "headPic": "6"}}},
                         # ★ updateCfgs 是**合并**语义（updateByObject），可以只补字段：
                         #   包内 roleCon 没有 totalIdArr → mainMap 的
                         #   ALL_ROLES = gameCfg.roleInf.totalIdArr 变成 undefined
@@ -708,14 +711,15 @@ class Handler(BaseHTTPRequestHandler):
                     # 会卡死：GameHandler.getNextInstance() 里 other.next 为空直接 return，
                     # 而 exit() 又要用它设好的 exitCallFun。
                     _ret = {}
+                    _g = -1
                     try:
                         _g = int((info or {}).get("gr_id"))
                         _i = int((info or {}).get("in_id"))
-                        _cnt = CHAPTER_LEVELS[_g] if 0 <= _g < len(CHAPTER_LEVELS) else 7
+                        _cnt = CHAPTER_LEVELS_G[_g] if 0 <= _g < len(CHAPTER_LEVELS_G) else 7
                         if _i + 1 < _cnt:
-                            _ret["next"] = {"gr_id": str(_g), "in_id": str(_i + 1)}
-                        elif _g + 1 < len(CHAPTER_LEVELS):
-                            _ret["next"] = {"gr_id": str(_g + 1), "in_id": "0"}
+                            _ret["next"] = {"gr_id": "group%d" % _g, "in_id": "instance%d" % (_i + 1)}
+                        elif _g + 1 < len(CHAPTER_LEVELS_G):
+                            _ret["next"] = {"gr_id": "group%d" % (_g + 1), "in_id": "instance0"}
                         log("[44444] 进关卡 gr=%d in=%d → next=%s" % (_g, _i, _ret.get("next")))
                     except Exception as _e:
                         log("[44444] next 计算失败:", _e)
@@ -724,7 +728,19 @@ class Handler(BaseHTTPRequestHandler):
                     #   masterArr 可切换出战的角色列表（顶部那排葫芦娃位子）
                     # 不返回 te 会让 SytInput.mychangenumb() 抛 #1010 → 塔里不能动也不能打。
                     _team = ((UD.get("1") or {}).get("teams") or {}).get("team0", {}).get("team") or ["role0"]
-                    _ret["te"] = {"ta": {"t": 1, "masterArr": list(_team)}}
+                    # masterArr 里必须是数字 roleid（客户端会拼 "role"+id 去查 roleCon）
+                    _arr = []
+                    for _rk in _team:
+                        try:
+                            _arr.append(int(str(_rk).replace("role", "")))
+                        except Exception:
+                            _arr.append(0)
+                    # 只有特殊副本（锁妖塔等，gr_id >= 2000）才下发 te；
+                    # 普通章节给了它反而会让战斗头像栏 getRoleName(#1010) 崩掉。
+                    if _g >= 2000:
+                        _ret["te"] = {"ta": {"t": 1, "masterArr": _arr}}
+                    else:
+                        log("[44444] 普通章节不下发 te")
                     payload = {"msg": "ok", "act": None, "returndata": _ret}
 
                 elif t == 44445:
@@ -1041,6 +1057,21 @@ def get_master():
         "groupID": "",
         "groupName": g("groupName", "帮会名字"),
     }
+    # 自定义属性覆盖（面板里填的值优先）
+    _c = UD.get("custom") or {}
+    if _c:
+        if _c.get("atk"):
+            m["atk"] = int(_c["atk"])
+        if _c.get("def"):
+            m["def"] = int(_c["def"])
+        if _c.get("life"):
+            m["life"] = int(_c["life"])
+            m["realLife"] = int(_c["life"])
+            m["maxLife"] = int(_c["life"])
+        if _c.get("crit"):
+            m["crit"] = float(_c["crit"])
+        if _c.get("critFactor"):
+            m["critFactor"] = float(_c["critFactor"])
     return m
 
 def _split3(body):
@@ -1355,6 +1386,34 @@ def restore_story():
     save_ud()
     log("[UI] 已恢复全通关 %d 关，指针推到 14/6" % n)
     return n
+
+
+def set_stats(atk=0, dfn=0, life=0, crit=-1.0, critf=-1.0):
+    """自定义全部角色的战斗属性（攻击/防御/生命/暴击率/暴击伤害）。
+
+    存在 player_ud.json 的 custom 节点里，get_master() 会优先生效。
+    传 0 表示"不覆盖该项"。
+    """
+    try:
+        c = UD.setdefault("custom", {})
+        for k, v in (("atk", atk), ("def", dfn), ("life", life), ("crit", crit), ("critFactor", critf)):
+            try:
+                f = float(v)
+            except Exception:
+                f = 0.0
+            if f > 0:
+                c[k] = f
+        save_ud()
+        log("[UI] 自定义属性 -> %s" % c)
+        return "ok"
+    except Exception as e:
+        return "err: %s" % e
+
+def clear_stats():
+    UD.pop("custom", None)
+    save_ud()
+    log("[UI] 已清除自定义属性")
+    return "ok"
 
 def set_role(idx):
     """切换当前出战角色：写 1.sltRole + 战队成员，下次登录生效。

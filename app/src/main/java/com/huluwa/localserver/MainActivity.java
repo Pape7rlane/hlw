@@ -9,7 +9,10 @@ import android.os.Bundle;
 import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.View;
+import android.text.InputType;
 import android.widget.Button;
+import android.widget.EditText;
+import android.widget.ScrollView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -31,6 +34,7 @@ public class MainActivity extends Activity {
 
     private TextView status;
     private LinearLayout roleRow;
+    private EditText inAtk, inDef, inLife, inCrit, inCritF;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -106,7 +110,35 @@ public class MainActivity extends Activity {
         launch.setOnClickListener(v -> restartGame());
         root.addView(launch);
 
-        setContentView(root);
+        // ── 自定义属性 ──
+        TextView stTip = new TextView(this);
+        stTip.setText("\n自定义属性（全部角色通用，留空=不改）：");
+        stTip.setTextSize(TypedValue.COMPLEX_UNIT_SP, 15);
+        root.addView(stTip);
+
+        inAtk = numField(root, "攻击力，例如 99999");
+        inDef = numField(root, "防御力，例如 88888");
+        inLife = numField(root, "生命值，例如 500000");
+        inCrit = numField(root, "暴击率 0~1，例如 0.5");
+        inCritF = numField(root, "暴击伤害倍率，例如 2.0");
+
+        LinearLayout stRow = new LinearLayout(this);
+        stRow.setOrientation(LinearLayout.HORIZONTAL);
+
+        Button apply = new Button(this);
+        apply.setText("应用属性");
+        apply.setOnClickListener(v -> applyStats());
+        stRow.addView(apply, lp());
+
+        Button clear = new Button(this);
+        clear.setText("清除自定义");
+        clear.setOnClickListener(v -> callSimple("clear_stats", "已清除自定义属性"));
+        stRow.addView(clear, lp());
+        root.addView(stRow);
+
+        ScrollView sv = new ScrollView(this);
+        sv.addView(root);
+        setContentView(sv);
         startServer();
         refreshRoleLabel();
     }
@@ -137,6 +169,48 @@ public class MainActivity extends Activity {
             restartGame();
         } catch (Throwable t) {
             status.setText("切换失败：" + t);
+        }
+    }
+
+    private EditText numField(LinearLayout parent, String hint) {
+        EditText e = new EditText(this);
+        e.setHint(hint);
+        e.setInputType(InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_DECIMAL);
+        e.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
+        parent.addView(e);
+        return e;
+    }
+
+    private void applyStats() {
+        try {
+            if (!Python.isStarted()) Python.start(new AndroidPlatform(this));
+            PyObject r = Python.getInstance().getModule("server").callAttr("set_stats",
+                    num(inAtk), num(inDef), num(inLife), num(inCrit), num(inCritF));
+            Toast.makeText(this, "属性已应用，正在重启游戏…", Toast.LENGTH_SHORT).show();
+            status.setText("属性已应用：" + r + "\n正在重启游戏…");
+            restartGame();
+        } catch (Throwable t) {
+            status.setText("应用失败：" + t);
+        }
+    }
+
+    private double num(EditText e) {
+        try {
+            String s = e.getText().toString().trim();
+            return s.isEmpty() ? 0 : Double.parseDouble(s);
+        } catch (Exception ex) {
+            return 0;
+        }
+    }
+
+    private void callSimple(String fn, String msg) {
+        try {
+            if (!Python.isStarted()) Python.start(new AndroidPlatform(this));
+            Python.getInstance().getModule("server").callAttr(fn);
+            Toast.makeText(this, msg, Toast.LENGTH_SHORT).show();
+            status.setText(msg);
+        } catch (Throwable t) {
+            status.setText("操作失败：" + t);
         }
     }
 
