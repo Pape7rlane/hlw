@@ -81,6 +81,26 @@ public class MainActivity extends Activity {
         root.addView(roleRow);
         buildRoleButtons();
 
+        // ── 剧情重放 ──
+        TextView storyTip = new TextView(this);
+        storyTip.setText("\n主线剧情：");
+        storyTip.setTextSize(TypedValue.COMPLEX_UNIT_SP, 15);
+        root.addView(storyTip);
+
+        LinearLayout storyRow = new LinearLayout(this);
+        storyRow.setOrientation(LinearLayout.HORIZONTAL);
+
+        Button replay = new Button(this);
+        replay.setText("重放主线剧情");
+        replay.setOnClickListener(v -> callStory("reset_story", "剧情已重置，正在重启游戏…"));
+        storyRow.addView(replay, lp());
+
+        Button restore = new Button(this);
+        restore.setText("恢复全通关");
+        restore.setOnClickListener(v -> callStory("restore_story", "已恢复全通关，正在重启游戏…"));
+        storyRow.addView(restore, lp());
+        root.addView(storyRow);
+
         Button launch = new Button(this);
         launch.setText("启动 / 重启游戏");
         launch.setOnClickListener(v -> restartGame());
@@ -117,6 +137,18 @@ public class MainActivity extends Activity {
             restartGame();
         } catch (Throwable t) {
             status.setText("切换失败：" + t);
+        }
+    }
+
+    private void callStory(String fn, String msg) {
+        try {
+            if (!Python.isStarted()) Python.start(new AndroidPlatform(this));
+            PyObject r = Python.getInstance().getModule("server").callAttr(fn);
+            Toast.makeText(this, msg + "（共 " + r + " 关）", Toast.LENGTH_SHORT).show();
+            status.setText(msg + "\n共 " + r + " 关");
+            restartGame();
+        } catch (Throwable t) {
+            status.setText("操作失败：" + t);
         }
     }
 

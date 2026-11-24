@@ -1275,6 +1275,44 @@ def role_con_patch():
     }}}
     return patch
 
+def reset_story():
+    """把全部关卡的通关记录清零 → 每关都当"没打过"，重新播放剧情。
+
+    关卡解锁用的是 7.war.now_g/now_i 这个进度指针，跟 story 里的 bastJudge 无关，
+    所以清零后 15 章依然全部可以进。
+    """
+    story = (UD.get("6") or {}).get("story") or {}
+    n = 0
+    for k, v in story.items():
+        if isinstance(v, dict):
+            v["bastJudge"] = 0
+            r = v.get("roles")
+            if isinstance(r, dict):
+                for sub in r.values():
+                    if isinstance(sub, dict):
+                        sub["winTimes"] = 0
+            n += 1
+    save_ud()
+    log("[UI] 剧情重放：已清零 %d 个关卡" % n)
+    return n
+
+def restore_story():
+    """恢复全通关（三星）。"""
+    story = (UD.get("6") or {}).get("story") or {}
+    n = 0
+    for k, v in story.items():
+        if isinstance(v, dict):
+            v["bastJudge"] = 3
+            r = v.get("roles")
+            if isinstance(r, dict):
+                for sub in r.values():
+                    if isinstance(sub, dict):
+                        sub["winTimes"] = 3
+            n += 1
+    save_ud()
+    log("[UI] 已恢复全通关 %d 关" % n)
+    return n
+
 def set_role(idx):
     """切换当前出战角色：写 1.sltRole + 战队成员，下次登录生效。
 
