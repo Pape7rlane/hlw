@@ -301,7 +301,8 @@ def enrich_role(role, i):
       state        已解锁（General.isLegal = state > 0）
       level        角色等级（General.level 直读）
       exp          经验
-      totalPower   必须 0，才会按装备重算战力
+      totalPower   关卡面板"阵容战力"直接读这个值；给 0 会弹"战力不足"。
+                   真实战力由 master 的 atk/def/life 决定，这里填个高值只为显示
       cell / bag   装备槽（数组形式）+ 角色装备背包
     """
     if not isinstance(role, dict):
@@ -310,7 +311,7 @@ def enrich_role(role, i):
     role["level"] = 90
     role["lv"] = 90
     role["exp"] = ROLE_EXP
-    role["totalPower"] = 0
+    role["totalPower"] = 1200000     # 高于所有关卡推荐战力（15 章约 95 万）
     # 法术：roleCon 里解出的真实 id 是 skillN / skill10N / skill20N
     # （role5 实测 skill5, skill105, skill205），给满级
     role["skill"] = [{"id": "skill%d" % i, "lv": GEN_SKILL_LV, "state": 1},
@@ -710,6 +711,42 @@ class Handler(BaseHTTPRequestHandler):
                     # 解封加速（genAccelerate），直接返回成功
                     payload = {"msg": "ok", "act": None, "returndata": {}}
 
+                elif t == 5422:
+                    # VIP 特权/福利领取、宝箱、充值列表 都走这个 type，用 atype 区分。
+                    #   viptequan : 领取每日 VIP 福利（配置 actchildvipfuli）
+                    #      判定 2.activity.vipReward.vip6.lastling 是否"今天"
+                    #      奖励 prop598(VIP6) / prop599(VIP12)
+                    _at = (info or {}).get("atype") if isinstance(info, dict) else None
+                    if _at in ("viptequan", "lingIndex"):
+                        _now = time.strftime("%Y-%m-%d %H:%M:%S")
+                        _act = UD.setdefault("2", {}).setdefault("activity", {})
+                        _vr = _act.setdefault("vipReward", {})
+                        _grant = {}
+                        for _lv, _pid in ((6, "prop598"), (12, "prop599")):
+                            _node = _vr.setdefault("vip%d" % _lv, {})
+                            _node["lastling"] = _now
+                            _grant[_pid] = {"id": _pid, "num": 1}
+                        _bag = UD.setdefault("2", {}).setdefault("props", {})
+                        for _pid, _it in _grant.items():
+                            _cur = _bag.get(_pid) or {"id": _pid, "num": 0}
+                            if not isinstance(_cur, dict):
+                                _cur = {"id": _pid, "num": 0}
+                            _cur["num"] = int(_cur.get("num") or 0) + _it["num"]
+                            _bag[_pid] = _cur
+                        save_ud()
+                        log("[VIP] 领取福利 %s，lastling=%s" % (list(_grant.keys()), _now))
+                        payload = {"msg": "ok", "act": None,
+                                   "returndataNew": _grant,
+                                   "update": ["2|activity|" + json.dumps(_act, ensure_ascii=False),
+                                              "2|props|" + json.dumps(_bag, ensure_ascii=False)]}
+                    elif _at == "box":
+                        payload = {"msg": "ok", "act": None, "returndata": {}, "update": []}
+                    elif _at == "payList":
+                        payload = {"msg": "ok", "act": None, "returndata": {"list": []}, "update": []}
+                    else:
+                        log("[CB] 5422 atype=%s 未处理" % _at)
+                        payload = {"msg": "ok", "act": None, "returndata": {}, "update": []}
+
                 elif t == 44444:
                     # 进关卡。必须回 next（下一关的 gr_id/in_id），否则结算界面点「下一关」
                     # 会卡死：GameHandler.getNextInstance() 里 other.next 为空直接 return，
@@ -741,10 +778,15 @@ class Handler(BaseHTTPRequestHandler):
                             _arr.append(0)
                     # 只有特殊副本（锁妖塔等，gr_id >= 2000）才下发 te；
                     # 普通章节给了它反而会让战斗头像栏 getRoleName(#1010) 崩掉。
+                    # te.ta 只给特殊副本（锁妖塔等 gr_id >= 2000）。
+                    # 普通章节下发它会让战斗头像栏 getRoleName 抛 #1010。
                     if _g >= 2000:
-                        _ret["te"] = {"ta": {"t": 1, "masterArr": _arr}}
-                    else:
-                        log("[44444] 普通章节不下发 te")
+                        _now = time.strftime("%Y-%m-%d %H:%M:%S")
+                        _ret["te"] = {"ta": {
+                            "role": _arr, "master": _arr[0] if _arr else 0,
+                            "masterArr": _arr, "t": _now, "ceng": -1,
+                            "id": _g, "prop": {},
+                        }}
                     payload = {"msg": "ok", "act": None, "returndata": _ret}
 
                 elif t == 44445:
