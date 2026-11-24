@@ -704,11 +704,22 @@ class Handler(BaseHTTPRequestHandler):
                     payload = {"msg": "ok", "act": None, "returndata": {}}
 
                 elif t == 44444:
-                    # 进关卡。
-                    # ⚠️ 队友注入的各种尝试都失败（WCEnterLevel 1211 不生成实体；
-                    #    combineObject.monsters 注入会导致战斗 HUD 抛 #1010 卡死）。
-                    # 这里必须保持干净的空返回，否则进关卡会崩。
-                    payload = {"msg": "ok", "act": None, "returndata": {}}
+                    # 进关卡。必须回 next（下一关的 gr_id/in_id），否则结算界面点「下一关」
+                    # 会卡死：GameHandler.getNextInstance() 里 other.next 为空直接 return，
+                    # 而 exit() 又要用它设好的 exitCallFun。
+                    _ret = {}
+                    try:
+                        _g = int((info or {}).get("gr_id"))
+                        _i = int((info or {}).get("in_id"))
+                        _cnt = CHAPTER_LEVELS[_g] if 0 <= _g < len(CHAPTER_LEVELS) else 7
+                        if _i + 1 < _cnt:
+                            _ret["next"] = {"gr_id": str(_g), "in_id": str(_i + 1)}
+                        elif _g + 1 < len(CHAPTER_LEVELS):
+                            _ret["next"] = {"gr_id": str(_g + 1), "in_id": "0"}
+                        log("[44444] 进关卡 gr=%d in=%d → next=%s" % (_g, _i, _ret.get("next")))
+                    except Exception as _e:
+                        log("[44444] next 计算失败:", _e)
+                    payload = {"msg": "ok", "act": None, "returndata": _ret}
 
                 elif t == 44445:
     # ★ 把客户端上报的通关结果落库：gr_id=章节, in_id=关卡编号, isWin=1
