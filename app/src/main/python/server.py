@@ -557,6 +557,10 @@ class Handler(BaseHTTPRequestHandler):
                     ud["7"] = dict(ud.get("7") or {})
                     ud["7"]["war"] = dict((ud["7"].get("war") or {}))
                     ud["7"]["war"]["r0"] = m
+                    # VIP 拉满（pubinfo.maxVipLv = 15）
+                    ud.setdefault("0", {})["vipLevel"] = 15
+                    m["vip"] = 15
+                    m["showVIP"] = 1
                     # 客户端把"当前选中角色"记在 1.sltRole；战斗头像、CSInitPlayer
                     # 都按它来取。不改它的话，不管你队伍选谁，HUD 都显示大娃。
                     try:
