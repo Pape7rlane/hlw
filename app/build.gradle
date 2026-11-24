@@ -1,0 +1,49 @@
+plugins {
+    id 'com.android.application'
+    id 'com.chaquo.python'
+}
+
+android {
+    namespace 'com.huluwa.localserver'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId "com.huluwa.localserver"
+        minSdk 21
+        targetSdk 34
+        versionCode 1
+        versionName "1.0"
+
+        ndk {
+            // 手机基本是 arm64；要兼容老机型再加 "armeabi-v7a"
+            abiFilters "arm64-v8a", "armeabi-v7a"
+        }
+
+        python {
+            // 云端/GitHub Actions 里用 PATH 上的 python3
+            buildPython "python3"
+            // 只用标准库，无第三方依赖
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    packagingOptions {
+        jniLibs {
+            useLegacyPackaging true
+        }
+    }
+}
+
+dependencies {
+    implementation 'androidx.appcompat:appcompat:1.6.1'
+}
