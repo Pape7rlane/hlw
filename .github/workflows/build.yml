@@ -8,6 +8,8 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write      # 失败时要往 ci-log 分支推日志
     steps:
       - uses: actions/checkout@v4
 
@@ -46,6 +48,13 @@ jobs:
           git add -f ci_error.txt
           git commit -m "ci error log" || true
           git push -f origin ci-log || echo "push ci-log failed"
+
+      # 把错误摘要写进 job 注解，外部（无需 token）可通过 checks API 读到
+      - name: Annotate error
+        if: failure()
+        run: |
+          MSG=$(grep -m5 -E "error:|FAILURE:|What went wrong|Caused by|Could not|Unsupported|requires" build.log 2>/dev/null | tr '\n' ' ' | cut -c1-900)
+          echo "::error title=build failed::$MSG"
 
       - name: Upload APK
         if: success()
