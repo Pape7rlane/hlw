@@ -1007,6 +1007,21 @@ def fallback_master():
                       {"state": 1, "id": "skill100", "lv": 0},
                       {"state": 0, "id": "skill200", "lv": 0}]}
 
+def _filter_props_for_role(props, idx):
+    """只保留属于该角色的装备外观（防止混入别的角色的武器）。"""
+    if not isinstance(props, list):
+        return []
+    tag = "fighterg1401%d" % (idx + 1)
+    out = []
+    for p in props:
+        if not isinstance(p, dict):
+            continue
+        urls = [str(d.get("url") or "") for d in (p.get("display") or []) if isinstance(d, dict)]
+        if any(tag in u for u in urls):
+            out.append(p)
+    return out
+
+
 def get_master():
     """战斗用的角色快照（userDGroup["7"].war.r0）。
 
@@ -1091,7 +1106,8 @@ def get_master():
         "sDmgRdc_factor": 1,
         # ── 装备外观（props → extrsEquip）──
         # 只有拿到该角色自己的快照时才带武器；否则清空，避免 "加载资源错误 fighterg1401X_weapon_dao"
-        "extrsEquip": (src.get("props") or []) if str(src.get("roleID", src.get("roleid"))) == str(sel_idx) else [],
+        "extrsEquip": _filter_props_for_role(src.get("props") or [], sel_idx)
+                      if str(src.get("roleID", src.get("roleid"))) == str(sel_idx) else [],
         # ── 技能：全部已解锁 ──
         # ★ 每个娃有自己的技能 id：skillN / skill10N / skill20N（N=角色编号）
         #   之前全发 skill0/100/200，所以不管用哪个娃，技能图标都是大娃的。
@@ -1380,10 +1396,9 @@ def role_con_patch():
         idx = 0
     if not (0 <= idx <= 6):
         idx = 0
+    # ⚠️ 不要覆盖 role0 的 url/headPic：主城模型会变，但武器模型按
+    #   "角色编号+固定武器类型" 拼，会对不上 → 加载卡在 InitMaster(56%)。
     patch = {"roleCon": {"role0": {
-        "name": ROLE_CON_NAMES[idx],
-        "url": "fighterg1401%d" % (idx + 1),
-        "headPic": str(idx),
         "skill":  "skill%d" % idx,
         "skill1": "skill10%d" % idx,
         "skill2": "skill20%d" % idx,
