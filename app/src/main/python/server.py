@@ -538,7 +538,7 @@ class Handler(BaseHTTPRequestHandler):
                     # gearsystem / extatv 包内都有正版，绝不能 override（会写坏 Local Store）
                     # extatvBtnList 包内没有，缺它 EquipSystem.tryLoadDebugAsScript() 直接 #1009
                     payload = {"msg": "ok", "returndata": {
-                        "deleteCfgs": [], "updateCfgs": {"roleCon": {"totalIdArr": [0, 1, 2, 3, 4, 5, 6], "rolerole0": {"name": "\u5927\u5a03", "url": "fighterg14011", "headPic": "0"}, "rolerole1": {"name": "\u4e8c\u5a03", "url": "fighterg14012", "headPic": "1"}, "rolerole2": {"name": "\u4e09\u5a03", "url": "fighterg14013", "headPic": "2"}, "rolerole3": {"name": "\u56db\u5a03", "url": "fighterg14014", "headPic": "3"}, "rolerole4": {"name": "\u4e94\u5a03", "url": "fighterg14015", "headPic": "4"}, "rolerole5": {"name": "\u516d\u5a03", "url": "fighterg14016", "headPic": "5"}, "rolerole6": {"name": "\u4e03\u5a03", "url": "fighterg14017", "headPic": "6"}}},
+                        "deleteCfgs": [],
                         # ★ updateCfgs 是**合并**语义（updateByObject），可以只补字段：
                         #   包内 roleCon 没有 totalIdArr → mainMap 的
                         #   ALL_ROLES = gameCfg.roleInf.totalIdArr 变成 undefined
@@ -1383,6 +1383,7 @@ def role_con_patch():
     patch = {"roleCon": {"role0": {
         "name": ROLE_CON_NAMES[idx],
         "url": "fighterg1401%d" % (idx + 1),
+        "headPic": str(idx),
         "skill":  "skill%d" % idx,
         "skill1": "skill10%d" % idx,
         "skill2": "skill20%d" % idx,
