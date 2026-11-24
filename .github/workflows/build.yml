@@ -9,7 +9,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     permissions:
-      contents: write      # 失败时要往 ci-log 分支推日志
+      contents: write
     steps:
       - uses: actions/checkout@v4
 
@@ -19,16 +19,12 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      # ubuntu-latest 自带 Android SDK，这里只做环境确认 + 写 local.properties
       - name: Prepare Android SDK env
         run: |
-          echo "ANDROID_HOME=$ANDROID_HOME"
-          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
-          ls "$ANDROID_HOME/platforms" 2>/dev/null || true
           echo "sdk.dir=$ANDROID_HOME" > local.properties
-          cat local.properties
+          echo "ANDROID_HOME=$ANDROID_HOME"
 
-      - name: Set up Python 3.10 (Chaquopy buildPython)
+      - name: Set up Python 3.10
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
@@ -39,33 +35,41 @@ jobs:
           gradle-version: '8.7'
 
       - name: Build debug APK
+        id: build
+        continue-on-error: true
         run: |
           set -o pipefail
-          gradle assembleDebug --no-daemon --stacktrace --info 2>&1 | tee build.log
+          gradle assembleDebug --no-daemon --stacktrace 2>&1 | tee build.log
+          exit ${PIPESTATUS[0]}
 
-      # 失败时把日志尾部推到一个单独的 ci-log 分支，方便外部（不用 token）读取原因
-      - name: Publish failure log
-        if: failure()
+      # 无论成功失败，都收集日志
+      - name: Collect log
+        if: always()
         run: |
-          git config user.name "ci"
-          git config user.email "ci@local"
-          { echo "=== last 300 lines of build.log ==="; tail -n 300 build.log 2>/dev/null || echo "(no build.log)"; } > ci_error.txt
+          {
+            echo "=== result: ${{ steps.build.outcome }} ==="
+            grep -vE "^\[INFO\]|^> Task .*UP-TO-DATE|^Download" build.log 2>/dev/null | tail -n 250 || echo "(no build.log)"
+          } > ci_error.txt
+          echo "--- 摘要 ---"; head -40 ci_error.txt
+
+      # 失败时把日志推到 ci-log 分支，外部可直接读取
+      - name: Publish log on failure
+        if: always() && steps.build.outcome != 'success'
+        run: |
+          git config user.name "ci"; git config user.email "ci@local"
           git checkout -B ci-log
           git add -f ci_error.txt
-          git commit -m "ci error log" || true
-          git push -f origin ci-log || echo "push ci-log failed"
-
-      # 把错误摘要写进 job 注解，外部（无需 token）可通过 checks API 读到
-      - name: Annotate error
-        if: failure()
-        run: |
-          MSG=$(grep -m5 -E "error:|FAILURE:|What went wrong|Caused by|Could not|Unsupported|requires" build.log 2>/dev/null | tr '\n' ' ' | cut -c1-900)
-          echo "::error title=build failed::$MSG"
+          git commit -m "ci log $(date -u +%H:%M:%S)" || true
+          git push -f origin ci-log || echo "push failed"
 
       - name: Upload APK
-        if: success()
+        if: steps.build.outcome == 'success'
         uses: actions/upload-artifact@v4
         with:
           name: huluwa-localserver-apk
           path: app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
+
+      - name: Fail job if build failed
+        if: steps.build.outcome != 'success'
+        run: exit 1
