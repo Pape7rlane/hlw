@@ -1237,6 +1237,36 @@ def serve_http(port):
     log("[HTTP] 监听 0.0.0.0:%d" % port)
     srv.serve_forever()
 
+ROLE_NAMES = ["大娃", "二娃", "三娃", "四娃", "五娃", "六娃", "七娃"]
+
+def set_role(idx):
+    """切换当前出战角色：写 1.sltRole + 战队成员，下次登录生效。
+
+    客户端把 1.sltRole 规范化写进本地 cookie(curSltRole)，
+    头像/名字/武器/战斗模型/技能图标全都按它取。
+    """
+    try:
+        idx = int(idx)
+    except Exception:
+        return "bad index"
+    if not (0 <= idx <= 6):
+        return "bad index"
+    key = "role%d" % idx
+    UD.setdefault("1", {})
+    UD["1"]["sltRole"] = key
+    teams = UD["1"].setdefault("teams", {})
+    t0 = teams.setdefault("team0", {"teamName": "战队1", "id": 0, "team": [key]})
+    t0["team"] = [key]
+    save_ud()
+    log("[UI] 切换角色 -> %s" % key)
+    return ROLE_NAMES[idx]
+
+def get_role():
+    try:
+        return UD.get("1", {}).get("sltRole", "role0")
+    except Exception:
+        return "role0"
+
 def start_all(data_dir=""):
     """Android(Chaquopy) 入口：把可写数据目录指向应用私有目录后再启动。"""
     global _DATA_DIR, LOGPATH, UD_FILE, PLAYER_STATE_FILE, PLAYER_STATES_FILE
