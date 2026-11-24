@@ -719,6 +719,12 @@ class Handler(BaseHTTPRequestHandler):
                         log("[44444] 进关卡 gr=%d in=%d → next=%s" % (_g, _i, _ret.get("next")))
                     except Exception as _e:
                         log("[44444] next 计算失败:", _e)
+                    # te.ta = 特殊副本(锁妖塔等)的队伍数据：
+                    #   t         开关（SytInput.isNowDate 用它判断是否特殊副本）
+                    #   masterArr 可切换出战的角色列表（顶部那排葫芦娃位子）
+                    # 不返回 te 会让 SytInput.mychangenumb() 抛 #1010 → 塔里不能动也不能打。
+                    _team = ((UD.get("1") or {}).get("teams") or {}).get("team0", {}).get("team") or ["role0"]
+                    _ret["te"] = {"ta": {"t": 1, "masterArr": list(_team)}}
                     payload = {"msg": "ok", "act": None, "returndata": _ret}
 
                 elif t == 44445:
