@@ -539,7 +539,7 @@ class Handler(BaseHTTPRequestHandler):
                         #   包内 roleCon 没有 totalIdArr → mainMap 的
                         #   ALL_ROLES = gameCfg.roleInf.totalIdArr 变成 undefined
                         #   → getAllRoleKey 直接 return → 队伍候选区永远空白、拖不出人。
-                        "updateCfgs": {"roleCon": {"totalIdArr": [0, 1, 2, 3, 4, 5, 6]}},
+                        "updateCfgs": _merge_role_patch(),
                         "overrideCfgs": {"extatvBtnList": {
                             "ver": 1,
                             "debugAs": None,
@@ -1238,6 +1238,42 @@ def serve_http(port):
     srv.serve_forever()
 
 ROLE_NAMES = ["大娃", "二娃", "三娃", "四娃", "五娃", "六娃", "七娃"]
+
+ROLE_CON_NAMES = ["大娃", "二娃", "三娃", "四娃", "五娃", "六娃", "七娃"]
+
+def _merge_role_patch():
+    """合并「候选角色列表」和「当前角色身份覆盖」两个补丁。"""
+    base = {"roleCon": {"totalIdArr": [0, 1, 2, 3, 4, 5, 6]}}
+    try:
+        extra = role_con_patch()
+        base["roleCon"].update(extra.get("roleCon") or {})
+    except Exception as e:
+        log("[CFG] role patch 失败: %s" % e)
+    return base
+
+def role_con_patch():
+    """把 roleCon.role0 的身份换成"当前出战角色"。
+
+    客户端 cookie 的 curSltRole 永远是 role0（游戏自身没有切换入口），
+    所以主城站着的、左上角名字都取自 roleCon.role0。
+    登录时用 updateCfgs 把 role0 的 url/name 换成所选角色 →
+    主城、头像、名字、战斗模型就全部统一了。
+    """
+    try:
+        cur = UD.get("1", {}).get("sltRole") or "role0"
+        idx = int(str(cur).replace("role", ""))
+    except Exception:
+        idx = 0
+    if not (0 <= idx <= 6):
+        idx = 0
+    patch = {"roleCon": {"role0": {
+        "name": ROLE_CON_NAMES[idx],
+        "url": "fighterg1401%d" % (idx + 1),
+        "skill":  "skill%d" % idx,
+        "skill1": "skill10%d" % idx,
+        "skill2": "skill20%d" % idx,
+    }}}
+    return patch
 
 def set_role(idx):
     """切换当前出战角色：写 1.sltRole + 战队成员，下次登录生效。
