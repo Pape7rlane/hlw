@@ -1,36 +1,50 @@
-# 纯 Java 服务端（一体包）
+# 少年葫芦娃 一体包 · Codex 接手包
 
-把服务端和 GM 面板用 **Java** 实现并注入游戏 APK，不依赖 Python 运行时。
+## 现状一句话
 
-## 为什么不用 Python
+一体包（游戏 + Java 服务端 + GM 面板 + 内嵌存档）已能进主城、显示武器、改属性；
+**唯一问题：进关卡后客户端不进入战斗状态（画面卡住）。**
 
-Chaquopy 与 AIR 运行时在同一进程里会原生冲突：
-- 后台线程 `Python.start()` → `mutex lock failed`（abort）
-- 主线程 `Python.start()` → `SIGSEGV`
+对照实验已确认：同一个客户端换成 **Python 服务端就完全正常**，所以问题在 Java 服务端的行为差异。
 
-改用纯 Java 后与 AIR 无任何原生交互，体积还小 10 MB。
+## 先读
 
-## 结构
+1. **CODEX_交接.md** ← 第 11 节是最新进展、已排除项、下一步实验（从这里开始）
+2. 交接文档.md ← 历史踩坑全记录（AS3/协议/客户端行为）
 
-```
-src/com/hlw/srv/Json.java    极简 JSON 解析/序列化
-src/com/hlw/srv/Store.java   存档（player_ud.json）+ 战斗快照
-src/com/hlw/srv/Http.java    HTTP 8080（服务器列表/会话/cb.php 各 type）
-src/com/hlw/srv/Tcp.java     TCP 9000（握手 116 / 进关卡 / 心跳）
-src/com/hlw/srv/Srv.java     启动入口 + GM 调用的方法
-src/com/hlw/gm/Gm.java       GM 面板（addContentView 覆盖在 AIR 之上）
-```
+## 快速开始
 
-## 注入点
-
-`com/ada/ane/sdk/EntryActivity.smali` 的 `onCreate`：
-
-```smali
-invoke-static {p0}, Lcom/hlw/gm/Gm;->start(Landroid/app/Activity;)V
+```bash
+pkg install -y openjdk-17 python zip unzip
+apt install -y smali          # baksmali / smali
+bash setup_tools.sh           # 下载 r8 / android.jar
+bash build_onepkg.sh          # 生成 /root/workspace/huluwa/build/signed.apk（约 8 分钟）
 ```
 
-## 构建
+未注入的干净客户端在 `/sdcard/Download/DSH-Go/plain_client.apk`（md5 092ff606），
+原始游戏包在 `/root/workspace/huluwa/游戏_当前安装版.apk`。
 
-`bash javasrv/build.sh`（需要 `BASE_APK` 环境变量）。
+## 目录
 
-云端：把游戏原包放 Release，设 `BASE_APK_URL` 变量 + `KS_BASE64`/`KS_PASS`/`KS_ALIAS` 密钥，push 到 `onepkg-java` 即可。
+```
+javasrv/src/com/hlw/srv/   Java 服务端（Json/Store/Http/Tcp/Srv）
+javasrv/src/com/hlw/gm/    GM 悬浮面板
+javasrv/assets/            满级存档
+tools/cmp_r0.py            并排起两个服务端、喂同一快照、diff r0
+tools/probe_tcp.py         直连 TCP 发 604/606，dump 回包 hex
+tools/run_both.sh          同时起 Python(8080) 与 Java(8081)
+tools/headless_main/       让 Java 服务端在桌面跑的入口
+python_server_reference.py Python 版服务端（已验证可玩，协议细节最全）
+```
+
+## 关键线索（省时间）
+
+Python 版正常时，客户端在收到 `613` 后会发 `1270`（CWRoleState，角色状态上报）；
+Java 版从来没收到 → 说明**关卡初始化没完成**，`MainWorldFun.nowGameState` 停在 1，
+`ExitGameLevel()` 抛 "未初始化完就释放了" 被 catch 吞掉，于是选关卡死。
+
+`nowGameState=2` 只在关卡 `gameComplete` 事件里赋值 —— 所以真正要查的是"为什么关卡没触发 gameComplete"。
+
+## 兜底
+
+双包方案（游戏包 + 服务端 APK）实机 100% 可用，见交接文档 11.7。

@@ -327,3 +327,83 @@ _loc5_.algorithmName/algorithm/algorithmParam = _loc8_.xxx;  // 我们没给
 
 **所以：复现一次卡死，然后 `logcat -d | grep "\[CLIENT\]"`，就能直接看到客户端停在 startEnter 的哪一行。**
 这比任何猜测都快。
+
+---
+
+## 11. ★★★ 最新进展（2026-11-25 13:4x）——从这里接手
+
+### 11.1 一体包已经完成的部分
+
+| 功能 | 状态 |
+|---|---|
+| 纯 Java 服务端注入游戏 APK | ✅ 能启动，游戏能进主城 |
+| GM 悬浮窗（角色切换/属性/剧情/关闭按钮） | ✅ 可用 |
+| 内置满级存档（首启复制到 files） | ✅ 生效 |
+| 15 章 102 关全解锁 | ✅ |
+| 武器外观（extrsEquip） | ✅ 关卡里能看到武器 |
+| **关卡内战斗** | ❌ **卡住：客户端不进入战斗状态** |
+
+### 11.2 关键对照实验（最重要的事实）
+
+同一台设备、同一个**未注入**的游戏客户端（`/sdcard/Download/DSH-Go/plain_client.apk`，md5 092ff606）：
+
+| 服务端 | 结果 |
+|---|---|
+| Python `mock/server.py`（proot 里跑） | ✅ **完全正常**：能移动、能打怪、有技能按钮 |
+| Java `javasrv`（proot 里跑，同样端口） | ❌ 关卡内卡住 |
+
+所以问题 100% 在 Java 服务端与 Python 服务端的行为差异上，与客户端、与"注入"无关。
+
+### 11.3 已经排除的方向（别重复做）
+
+| 已排除 | 证据 |
+|---|---|
+| `44444` 应答内容 | 两边 zlib 后**逐字节相同**（142 字节，含 `next` + `te.ta`） |
+| TCP `116/605/607/1265/1211` 回包 | 两边**逐字节相同**（用 socket 直接探测比对过） |
+| `7.war.r0` 字段名 | 两边都是 29 个字段且名称完全一致（`atk/def/life/speed/crit/critFactor/extrsEquip/skill/...`） |
+| 缺 `te.ta` | 加上仍卡 |
+| 1211 发送时机（立即/延迟/不发） | 三种都试过，都卡 |
+| 607 延迟发送 | 试过 600ms，仍卡 |
+| Flash 策略文件推送 | 已补（Python 有），仍卡 |
+| HTTP 头解析 | 修好了（曾导致"获取服务器列表失败"） |
+
+### 11.4 目前最强的线索
+
+Python 版正常时，客户端在 `613(SCLeaveLevel)` 之后会发 **`1270` = `CWRoleState`**（角色状态上报，说明它已经进入战斗玩法）；Java 版从来没有收到 1270。
+
+→ 说明**主城那一关（gamelevel2000-0）在 Java 版下没有完成初始化**，客户端 `MainWorldFun.nowGameState` 停在 1，
+`ExitGameLevel()` 里 `if(nowGameState != 2) throw new Error("未初始化完就释放了")` 抛错，被 `GameHandler.gameRequestHandler` 的 `catch(e:Error){}` 静默吞掉 → 选关卡死。
+
+`nowGameState = 2` 只在 `MainWorldFun.OnEnterGameOk`（关卡的 `gameComplete` 事件）里赋值。
+所以真正的问题是：**Java 服务端下，关卡（含主城）的 `gameComplete` 没触发。**
+
+### 11.5 下一步实验建议（按优先级）
+
+1. **抓客户端内部状态**：`GameHandler` / `MainWorldFun` 里到处是 `trace()`，客户端会 POST 到 `/elog/l.php`。
+   在 `Http.route()` 的 `elog` 分支把 body **完整**打出来（现在只打前 400 字符），复现一次就能看到卡在哪一行。
+2. **对比 HTTP 请求时序**：Python 版 606 之后客户端还会发 `cb.php?type=3100`(actid=8) 等；Java 版同样有。
+   用 `tcpdump`/日志时间戳比对两边**每个包的时间间隔**，看客户端是否在等某个 1~2 秒后的重试。
+3. **换一种 1211**：Python 的 monster JSON 与 Java 的字段顺序不同，尝试**逐字节复制** Python 生成的那段
+   （`mock/server.py` 里 `mon = {...}`，用 `json.dumps` 的默认分隔符 `, ` 和 `: `，不是紧凑格式）。
+   Java 的 `Json.write` 是紧凑格式；长度不同可能导致客户端解析器对 `\0` 结尾长度的处理差异。
+4. **对比 `cb.php?type=0` 的完整响应**：不只是 `7.war`，还有 `1.roles/teams`、`6.story` 等。
+   Python 版会返回 `custom` 组，Java 不返回；也可能 Python 的 `UD` 里有 Java 缺少的字段。
+   已有工具：`tools/cmp_r0.py`（同时起两个服务端、喂同一份 608 快照、diff r0）。
+
+### 11.6 现成的调试工具（都在 `tools/`）
+
+| 脚本 | 作用 |
+|---|---|
+| `tools/run_both.sh` | 同时起 Python(8080) 和 Java(8081)，用于并排对比 |
+| `tools/cmp_r0.py` | 给两个服务端喂同一份 `CSInitPlayer` 快照，diff `7.war.r0` |
+| `tools/probe_tcp.py` | 直接连 TCP、发 604/606、dump 回包 hex，用于逐字节比对 |
+| `tools/headless_main/` | 让 Java 服务端在桌面/容器里跑（`Store.init(dir, null)` + `Http.start()` + `Tcp.start()`） |
+
+### 11.7 兜底方案（如果 Java 走不通）
+
+双包方案已被实机验证 100% 可用：
+
+- 游戏包：`/sdcard/Download/DSH-Go/plain_client.apk`（或官方原包）
+- 服务端包：`main` 分支的 Chaquopy 服务端 APK（内含 Python 服务端 + GM 面板）
+
+先启动服务端 APK，再进游戏。缺点是需要装两个包，但稳定。
