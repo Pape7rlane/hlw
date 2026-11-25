@@ -197,19 +197,26 @@ public final class Gm {
             ScrollView sv = new ScrollView(act);
             sv.addView(box);
 
-            int flags = android.view.WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL;
+            // 面板占满屏幕高度，避免内容被截断、无法滑动
+            android.util.DisplayMetrics dm = act.getResources().getDisplayMetrics();
+            int w = (int) (dm.widthPixels * 0.92);
+            int h = (int) (dm.heightPixels * 0.88);
+            int flags = android.view.WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
+                    | android.view.WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
+                    | android.view.WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS;
             android.view.WindowManager.LayoutParams lp =
                     new android.view.WindowManager.LayoutParams(
-                            (int) (300 * act.getResources().getDisplayMetrics().density),
-                            (int) (420 * act.getResources().getDisplayMetrics().density),
+                            w, h,
                             android.os.Build.VERSION.SDK_INT >= 26
                                     ? android.view.WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
                                     : android.view.WindowManager.LayoutParams.TYPE_PHONE,
                             flags, android.graphics.PixelFormat.TRANSLUCENT);
             lp.gravity = Gravity.LEFT | Gravity.TOP;
-            lp.x = 12;
-            lp.y = 180;
-            if (wm == null) wm = (android.view.WindowManager) act.getSystemService(Activity.WINDOW_SERVICE);
+            lp.x = 8;
+            lp.y = (int) (dm.heightPixels * 0.06);
+            sv.setFillViewport(true);
+            sv.setVerticalScrollBarEnabled(true);
+            sv.setSmoothScrollingEnabled(true);
             wm.addView(sv, lp);
             sPanel = sv;
             Log.i(TAG, "GM 菜单已打开");
