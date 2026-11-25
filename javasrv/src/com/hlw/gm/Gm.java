@@ -43,39 +43,77 @@ public final class Gm {
         }
     }
 
+    private static android.view.WindowManager wm;
+    private static TextView sBtn;
+
     private static void addButton(final Activity act) {
-        // AIR 的画面层会盖住 addContentView 加进去的 View，必须挂到 decorView 上，
-        // 并且等 AIR 自己把 SurfaceView 加完（约 2~4 秒）再贴上去。
+        // AIR 用 SurfaceView 渲染，普通 View 会被盖住 → 必须用系统悬浮窗（TYPE_APPLICATION_OVERLAY）
         act.getWindow().getDecorView().postDelayed(new Runnable() {
             public void run() {
                 try {
-                    TextView b = new TextView(act);
-                    b.setText("GM");
-                    b.setTextColor(Color.WHITE);
-                    b.setTextSize(TypedValue.COMPLEX_UNIT_SP, 15);
-                    b.setGravity(Gravity.CENTER);
-                    b.setBackgroundColor(0xDD1E88E5);
-                    b.setPadding(26, 12, 26, 12);
-                    b.setOnClickListener(new View.OnClickListener() {
+                    if (android.os.Build.VERSION.SDK_INT >= 23
+                            && !android.provider.Settings.canDrawOverlays(act)) {
+                        Log.i(TAG, "没有悬浮窗权限，跳转授权页");
+                        try {
+                            android.content.Intent it = new android.content.Intent(
+                                    android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                                    android.net.Uri.parse("package:" + act.getPackageName()));
+                            it.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK);
+                            act.startActivity(it);
+                        } catch (Throwable e) { Log.e(TAG, "跳授权页失败", e); }
+                        retryLater(act, 10);
+                        return;
+                    }
+                    wm = (android.view.WindowManager) act.getSystemService(Activity.WINDOW_SERVICE);
+                    sBtn = new TextView(act);
+                    sBtn.setText("GM");
+                    sBtn.setTextColor(Color.WHITE);
+                    sBtn.setTextSize(TypedValue.COMPLEX_UNIT_SP, 15);
+                    sBtn.setGravity(Gravity.CENTER);
+                    sBtn.setBackgroundColor(0xDD1E88E5);
+                    sBtn.setPadding(26, 12, 26, 12);
+                    sBtn.setOnClickListener(new View.OnClickListener() {
                         public void onClick(View v) { panel(act); }
                     });
-                    android.widget.FrameLayout.LayoutParams lp =
-                            new android.widget.FrameLayout.LayoutParams(
+                    int flags = android.view.WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+                            | android.view.WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN;
+                    android.view.WindowManager.LayoutParams lp =
+                            new android.view.WindowManager.LayoutParams(
                                     ViewGroup.LayoutParams.WRAP_CONTENT,
-                                    ViewGroup.LayoutParams.WRAP_CONTENT);
+                                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                                    android.os.Build.VERSION.SDK_INT >= 26
+                                            ? android.view.WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+                                            : android.view.WindowManager.LayoutParams.TYPE_PHONE,
+                                    flags, android.graphics.PixelFormat.TRANSLUCENT);
                     lp.gravity = Gravity.LEFT | Gravity.TOP;
-                    lp.leftMargin = 16;
-                    lp.topMargin = 260;
-                    android.view.ViewGroup root =
-                            (android.view.ViewGroup) act.getWindow().getDecorView();
-                    root.addView(b, lp);
-                    b.bringToFront();
-                    Log.i(TAG, "GM 按钮已挂到 decorView");
+                    lp.x = 16;
+                    lp.y = 260;
+                    wm.addView(sBtn, lp);
+                    Log.i(TAG, "GM 悬浮窗已添加");
                 } catch (Throwable e) {
                     Log.e(TAG, "addButton fail", e);
                 }
             }
-        }, 3500);
+        }, 3000);
+    }
+
+    /** 授权页返回后自动重试（最多 n 次，每次 3 秒） */
+    private static void retryLater(final Activity act, final int n) {
+        if (n <= 0) return;
+        act.getWindow().getDecorView().postDelayed(new Runnable() {
+            public void run() {
+                try {
+                    android.provider.Settings.canDrawOverlays(act);
+                    if (android.os.Build.VERSION.SDK_INT >= 23
+                            && android.provider.Settings.canDrawOverlays(act)) {
+                        Log.i(TAG, "已获得悬浮窗权限，重新挂载");
+                        addButton(act);
+                    } else {
+                        retryLater(act, n - 1);
+                    }
+                } catch (Throwable e) { retryLater(act, n - 1); }
+            }
+        }, 3000);
     }
 
     private static void panel(final Activity act) {

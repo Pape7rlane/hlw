@@ -20,6 +20,8 @@ public final class Store {
     private static File dir;
     private static File file;
     private static String sltRole = "role0";
+    /** 客户端 CSInitPlayer 上报的完整自身数据（战斗就靠它） */
+    private static Map<String, Object> LAST_PLAYER = new LinkedHashMap<String, Object>();
 
     private Store() {}
 
@@ -88,6 +90,20 @@ public final class Store {
 
     public static String sltRole() { return sltRole; }
 
+    /** 收到 CSInitPlayer：存下客户端自算的完整战斗数据 */
+    public static synchronized void setLastPlayer(String json) {
+        try {
+            Object o = Json.parse(json);
+            if (o instanceof Map) {
+                LAST_PLAYER.clear();
+                LAST_PLAYER.putAll(Json.obj(o));
+                Log_.i("已保存客户端战斗快照，字段数 " + LAST_PLAYER.size());
+            }
+        } catch (Throwable e) { Log_.e("解析 CSInitPlayer 失败", e); }
+    }
+
+    public static boolean hasLastPlayer() { return !LAST_PLAYER.isEmpty(); }
+
     public static void setSltRole(String r) {
         sltRole = r;
         objIn(group("1"), "sltRolemark"); // 占位，保持结构
@@ -131,6 +147,7 @@ public final class Store {
     /** 战斗用的角色快照（userDGroup[7].war.r0） */
     public static Map<String, Object> buildMaster() {
         int idx = sltIndex();
+        if (!LAST_PLAYER.isEmpty()) return masterFromClient(idx);
         Map<String, Object> m = new LinkedHashMap<String, Object>();
         m.put("name", ROLE_NAMES[idx]);
         m.put("url", "fighterg1401" + (idx + 1));
@@ -174,6 +191,53 @@ public final class Store {
         m.put("groupID", "");
         m.put("groupName", "帮会名字");
         return m;
+    }
+
+    /** 用客户端上报的数据拼 7.war.r0：字段齐全，只覆盖身份与武器外观 */
+    private static Map<String, Object> masterFromClient(int idx) {
+        Map<String, Object> m = new LinkedHashMap<String, Object>();
+        m.putAll(LAST_PLAYER);
+        m.put("url", "fighterg1401" + (idx + 1));
+        m.put("name", ROLE_NAMES[idx]);
+        m.put("roleid", String.valueOf(idx));
+        m.put("level", 90);
+        m.put("vip", 15);
+        m.put("showVIP", 1);
+        // 技能换成该角色的
+        List<Object> sk = new ArrayList<Object>();
+        for (int k : new int[]{0, 100, 200}) {
+            Map<String, Object> one = new LinkedHashMap<String, Object>();
+            one.put("id", "skill" + (k == 0 ? idx : k + idx));
+            one.put("lv", 98);
+            one.put("state", 1);
+            sk.add(one);
+        }
+        m.put("skill", sk);
+        // 武器外观只保留属于本角色的，避免串模型
+        m.put("props", filterProps(Json.arr(LAST_PLAYER.get("props")), idx));
+        // 自定义属性覆盖
+        Map<String, Object> c = Json.obj(group("custom"));
+        if (c.containsKey("atk")) m.put("attack", c.get("atk"));
+        if (c.containsKey("def")) m.put("defence", c.get("def"));
+        if (c.containsKey("life")) { m.put("life", c.get("life")); m.put("realLife", c.get("life")); m.put("maxLife", c.get("life")); }
+        if (c.containsKey("crit")) m.put("crit", c.get("crit"));
+        return m;
+    }
+
+    private static List<Object> filterProps(List<Object> props, int idx) {
+        List<Object> out = new ArrayList<Object>();
+        if (props == null) return out;
+        String tag = "fighterg1401" + (idx + 1);
+        for (Object o : props) {
+            Map<String, Object> p = Json.obj(o);
+            boolean keep = false;
+            for (Object d : Json.arr(p.get("display"))) {
+                String u = Json.s(Json.obj(d).get("url"), "");
+                if (u.contains(tag)) { keep = true; break; }
+            }
+            if (keep) out.add(p);
+        }
+        return out;
     }
 
     // ───────── 文件工具 ─────────

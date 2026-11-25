@@ -110,6 +110,8 @@ public final class Tcp {
                 case 612: // CSLeaveLevel
                     return build(613, ok, id);
                 case 608: { // CSInitPlayer -> 609（int32 result + 空 levelID）
+                    String json = readCStr(body, 0);
+                    if (!json.isEmpty()) Store.setLastPlayer(json);
                     byte[] r = new byte[5];
                     System.arraycopy(ok, 0, r, 0, 4);
                     r[4] = 0;
