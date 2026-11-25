@@ -83,7 +83,7 @@ public final class Http {
             }
             route(s, path, new String(body, "UTF-8"));
         } catch (Throwable e) {
-            // 单连接异常不影响服务
+            Log_.e("HTTP 连接处理异常", e);   // 之前这里静默吞掉，出问题完全看不到
         } finally {
             try { s.close(); } catch (Throwable ignored) {}
         }
@@ -162,8 +162,11 @@ public final class Http {
             int type = toInt(first(q, "type"), 0);
             String infoRaw = first(q, "info");
             Map<String, Object> info = decodeInfo(infoRaw);
+            Log_.i("cb " + type + " info=" + Json.write(info));
             Map<String, Object> payload = cb(type, info);
-            send(s, zlib(Json.write(payload)), "application/octet-stream", false);
+            byte[] outBytes = zlib(Json.write(payload));
+            Log_.i("cb " + type + " resp=" + Json.write(payload) + " (" + outBytes.length + "B zlib)");
+            send(s, outBytes, "application/octet-stream", false);
             return;
         }
         send(s, new byte[0], "text/plain", false);
