@@ -74,47 +74,67 @@ public final class Tcp {
 
     private static byte[] handle(int type, int id, byte[] body) {
         try {
-        switch (type) {
-            case 1:   // CGHeartBeat
-                return build(2, new byte[0], id);
-            case 115: // CGCryptKey 回执，无需响应
-                return null;
-            case 128: // CGVersion -> GCVersion
-                return build(129, new byte[0], id);
-            case 117: // CGLoginAccount -> GCLoginAccount
-                return build(118, new byte[0], id);
-            case 119: { // CGLoginPlayer -> GCLoginPlayer
-                return build(120, new byte[0], id);
+            byte[] ok = int32(0);   // 所有应答的 result=0
+            switch (type) {
+                case 1:   // CGHeartBeat
+                    return build(2, ok, id);
+                case 115: // CGCryptKey 回执
+                    return null;
+                case 128: // CGVersion
+                    return build(129, ok, id);
+                case 117: // CGLoginAccount
+                    return build(118, ok, id);
+                case 119: // CGLoginPlayer
+                    return build(120, ok, id);
+                case 604: { // CSLockLevel -> 605（levelID 必须原样回，否则客户端直接丢弃）
+                    String levelId = readCStr(body, 0);
+                    java.io.ByteArrayOutputStream b = new java.io.ByteArrayOutputStream();
+                    b.write(levelId.getBytes("UTF-8"));
+                    b.write(0);
+                    b.write(int32(0));                              // result
+                    b.write(int32((int) (System.currentTimeMillis() / 1000) & 0x7FFF)); // copyID
+                    b.write(int32(1));                              // onlineNum
+                    b.write(0);                                     // param 空串
+                    Log_.i("锁关卡 " + levelId);
+                    return build(605, b.toByteArray(), id);
+                }
+                case 606: { // CSEnterLevel -> 607 + 1265（让客户端当驱动方跑关卡）
+                    byte[] a = build(607, ok, id);
+                    byte[] c = build(1265, ok, id);
+                    byte[] r = new byte[a.length + c.length];
+                    System.arraycopy(a, 0, r, 0, a.length);
+                    System.arraycopy(c, 0, r, a.length, c.length);
+                    Log_.i("进关卡，已回 607 + 1265");
+                    return r;
+                }
+                case 612: // CSLeaveLevel
+                    return build(613, ok, id);
+                case 608: { // CSInitPlayer -> 609（int32 result + 空 levelID）
+                    byte[] r = new byte[5];
+                    System.arraycopy(ok, 0, r, 0, 4);
+                    r[4] = 0;
+                    return build(609, r, id);
+                }
+                default:
+                    Log_.i("未处理 type=" + type + " len=" + body.length + " → 兜底回 " + (type + 1));
+                    return build(type + 1, ok, id);
             }
-            case 604: { // CSLockLevel -> SCLockLevel(605)
-                ByteArrayOutputStream bo = new ByteArrayOutputStream();
-                writeShortStr(bo, "gamelevel2000-0");
-                bo.write(new byte[]{0, 0, 0, 0});
-                bo.write(new byte[]{0, 0, 0, 0});
-                bo.write(new byte[]{0, 0, 0, 0});
-                bo.write(new byte[]{0, 0, 0, 0});
-                return build(605, bo.toByteArray(), id);
-            }
-            case 606: { // CSEnterLevel -> 607 + WCGameDriver(1265)
-                byte[] a = build(607, new byte[0], id);
-                byte[] b = build(1265, new byte[0], id);
-                byte[] r = new byte[a.length + b.length];
-                System.arraycopy(a, 0, r, 0, a.length);
-                System.arraycopy(b, 0, r, a.length, b.length);
-                Log_.i("进关卡，已回 607 + 1265");
-                return r;
-            }
-            case 612: // CSLeaveLevel -> 613
-                return build(613, new byte[0], id);
-            case 608: // CSInitPlayer（客户端上报自身快照，单机版忽略）
-                return null;
-            default:
-                return null;
-        }
         } catch (Throwable t) {
             Log_.e("handle type=" + type + " 失败", t);
             return null;
         }
+    }
+
+    static byte[] int32(int v) {
+        return new byte[]{(byte) (v >>> 24), (byte) (v >>> 16), (byte) (v >>> 8), (byte) v};
+    }
+
+    /** 读 \0 结尾字符串 */
+    static String readCStr(byte[] b, int off) {
+        if (b == null || off >= b.length) return "";
+        int e = off;
+        while (e < b.length && b[e] != 0) e++;
+        try { return new String(b, off, e - off, "UTF-8"); } catch (Throwable t) { return ""; }
     }
 
     /** GCCryptKey(116)：int32 algorithm, uint32 len, key, uint32 len, key（全 0 密钥） */

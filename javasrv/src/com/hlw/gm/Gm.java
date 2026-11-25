@@ -44,23 +44,38 @@ public final class Gm {
     }
 
     private static void addButton(final Activity act) {
-        TextView b = new TextView(act);
-        b.setText("GM");
-        b.setTextColor(Color.WHITE);
-        b.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
-        b.setGravity(Gravity.CENTER);
-        b.setBackgroundColor(0xCC1E88E5);
-        b.setPadding(20, 10, 20, 10);
-        b.setOnClickListener(new View.OnClickListener() {
-            public void onClick(View v) { panel(act); }
-        });
-        android.widget.FrameLayout.LayoutParams lp =
-                new android.widget.FrameLayout.LayoutParams(
-                        ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        lp.gravity = Gravity.LEFT | Gravity.TOP;
-        lp.leftMargin = 12;
-        lp.topMargin = 240;
-        act.addContentView(b, lp);
+        // AIR 的画面层会盖住 addContentView 加进去的 View，必须挂到 decorView 上，
+        // 并且等 AIR 自己把 SurfaceView 加完（约 2~4 秒）再贴上去。
+        act.getWindow().getDecorView().postDelayed(new Runnable() {
+            public void run() {
+                try {
+                    TextView b = new TextView(act);
+                    b.setText("GM");
+                    b.setTextColor(Color.WHITE);
+                    b.setTextSize(TypedValue.COMPLEX_UNIT_SP, 15);
+                    b.setGravity(Gravity.CENTER);
+                    b.setBackgroundColor(0xDD1E88E5);
+                    b.setPadding(26, 12, 26, 12);
+                    b.setOnClickListener(new View.OnClickListener() {
+                        public void onClick(View v) { panel(act); }
+                    });
+                    android.widget.FrameLayout.LayoutParams lp =
+                            new android.widget.FrameLayout.LayoutParams(
+                                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                                    ViewGroup.LayoutParams.WRAP_CONTENT);
+                    lp.gravity = Gravity.LEFT | Gravity.TOP;
+                    lp.leftMargin = 16;
+                    lp.topMargin = 260;
+                    android.view.ViewGroup root =
+                            (android.view.ViewGroup) act.getWindow().getDecorView();
+                    root.addView(b, lp);
+                    b.bringToFront();
+                    Log.i(TAG, "GM 按钮已挂到 decorView");
+                } catch (Throwable e) {
+                    Log.e(TAG, "addButton fail", e);
+                }
+            }
+        }, 3500);
     }
 
     private static void panel(final Activity act) {
