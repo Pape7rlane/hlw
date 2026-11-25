@@ -11,10 +11,12 @@ public final class Srv {
 
     private Srv() {}
 
-    public static synchronized void start(File dataDir) {
+    public static synchronized void start(android.content.Context ctx) {
         if (started) return;
         started = true;
-        Store.init(dataDir);
+        File dataDir = ctx.getFilesDir();
+        if (!dataDir.exists()) dataDir.mkdirs();
+        Store.init(dataDir, ctx.getAssets());
         Http.start();
         Tcp.start();
         Log_.i("服务端已启动，数据目录 " + dataDir.getAbsolutePath());

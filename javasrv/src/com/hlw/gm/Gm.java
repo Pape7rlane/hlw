@@ -30,7 +30,7 @@ public final class Gm {
             act.runOnUiThread(new Runnable() {
                 public void run() {
                     try {
-                        Srv.start(act.getFilesDir());
+                        Srv.start(act.getApplicationContext());
                         Log.i(TAG, "srv started: " + Srv.status());
                         addButton(act);
                     } catch (Throwable e) {

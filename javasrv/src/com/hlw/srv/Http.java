@@ -51,13 +51,15 @@ public final class Http {
         try {
             InputStream in = s.getInputStream();
             ByteArrayOutputStream head = new ByteArrayOutputStream();
-            int c, state = 0;
+            int c;
+            // 读到空行（\r\n\r\n）为止；之前逐行计数判断写错了，会一直读下去导致请求无应答
             while ((c = in.read()) >= 0) {
                 head.write(c);
-                if (c == '\n') {
-                    state++;
-                    if (state == 1 && head.toString("UTF-8").trim().isEmpty()) break;
-                }
+                byte[] hb = head.toByteArray();
+                int n = hb.length;
+                if (n >= 4 && hb[n-4] == '\r' && hb[n-3] == '\n' && hb[n-2] == '\r' && hb[n-1] == '\n') break;
+                if (n >= 2 && hb[n-2] == '\n' && hb[n-1] == '\n') break;
+                if (n > 65536) break;
             }
             String h = new String(head.toByteArray(), "UTF-8");
             String[] lines = h.split("\r?\n");

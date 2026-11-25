@@ -45,6 +45,30 @@ if 'Lcom/hlw/gm/Gm;' not in s:
 print('注入完成')
 PY
 
+echo "== 4b. 屏蔽广告与登录弹窗 =="
+python3 - <<'PY2'
+def stub(path, sig, body):
+    s=open(path,encoding='utf-8').read(); L=s.split('\n'); out=[]; i=0
+    while i<len(L):
+        if L[i].startswith('.method') and sig in L[i]:
+            out.append(L[i]); i+=1
+            while i<len(L) and L[i].strip().startswith(('.registers','.locals')):
+                out.append(L[i]); i+=1
+            out.extend(body)
+            while i<len(L) and not L[i].startswith('.end method'): i+=1
+            continue
+        out.append(L[i]); i+=1
+    open(path,'w',encoding='utf-8').write('\n'.join(out))
+b='$WORK/base/com/ada/ane/adapubfun/fun/'
+try:
+    stub(b+'adaAlarmReceiver.smali','onReceive(',['    return-void'])
+    stub(b+'adaAlarmReceiver.smali','showNotification(',['    return-void'])
+    stub(b+'adaAlertDialog.smali','call(',['    const/4 v0, 0x0','    return-object v0'])
+    print('广告 SDK 已停用')
+except Exception as e:
+    print('跳过:', e)
+PY2
+
 echo "== 5. 汇编 + 打包 =="
 java -jar /tmp/tools/smali.jar a "$WORK/base" -o "$WORK/classes.dex"
 python3 - "$BASE_APK" "$WORK/classes.dex" "$OUT_APK" <<'PY'
@@ -59,6 +83,9 @@ for it in zg.infolist():
     z = zipfile.ZipInfo(nm, date_time=it.date_time)
     z.compress_type = it.compress_type; z.external_attr = it.external_attr
     zo.writestr(z, data)
+z=zipfile.ZipInfo('assets/hlw/player_ud.json', date_time=(2020,1,1,0,0,0))
+z.compress_type=zipfile.ZIP_DEFLATED
+zo.writestr(z, open(os.path.join(os.path.dirname(__file__) if False else '/root/workspace/hlw_save.json','rb').read()) if False else open('javasrv/assets/player_ud.json','rb').read())
 zo.close(); zg.close()
 print('打包完成', out, os.path.getsize(out))
 PY

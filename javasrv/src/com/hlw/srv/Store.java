@@ -23,7 +23,7 @@ public final class Store {
 
     private Store() {}
 
-    public static synchronized void init(File dataDir) {
+    public static synchronized void init(File dataDir, Object assetManager) {
         dir = dataDir;
         if (!dir.exists()) dir.mkdirs();
         file = new File(dir, "player_ud.json");
@@ -38,6 +38,26 @@ public final class Store {
                     return;
                 }
             } catch (Throwable e) { Log_.e("读存档失败", e); }
+        }
+        // 首次启动：从 APK 内置 assets 复制初始存档（满级存档，别人装上即可玩）
+        try {
+            java.lang.reflect.Method open = assetManager.getClass()
+                    .getMethod("open", String.class);
+            java.io.InputStream in = (java.io.InputStream) open.invoke(assetManager, "hlw/player_ud.json");
+            FileOutputStream fo = new FileOutputStream(file);
+            byte[] buf = new byte[8192];
+            int n;
+            while ((n = in.read(buf)) > 0) fo.write(buf, 0, n);
+            fo.close(); in.close();
+            Object o = Json.parse(new String(readAll(file), "UTF-8"));
+            if (o instanceof Map) {
+                UD.clear();
+                UD.putAll(Json.obj(o));
+                Log_.i("已从内置资产复制存档，组数 " + UD.size());
+                return;
+            }
+        } catch (Throwable e) {
+            Log_.e("复制内置存档失败（将使用空数据）", e);
         }
         Log_.i("没有存档，使用空数据");
     }
