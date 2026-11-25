@@ -117,113 +117,141 @@ public final class Gm {
         }, 3000);
     }
 
-    /** GM 菜单：独立悬浮窗口，不依赖 Activity token（AIR 会重建 Activity，用 Dialog 必崩） */
+    /** GM 菜单：紧凑单屏布局（不依赖滚动），带关闭按钮 */
     private static void panel(final Activity act) {
         try {
             if (sPanel != null && sPanel.getParent() != null) {
-                wm.removeView(sPanel);
-                sPanel = null;
-                return;   // 再点一次收起
+                wm.removeView(sPanel); sPanel = null; return;
             }
+            float dp = act.getResources().getDisplayMetrics().density;
             LinearLayout box = new LinearLayout(act);
             box.setOrientation(LinearLayout.VERTICAL);
-            int pad = (int) (12 * act.getResources().getDisplayMetrics().density);
-            box.setPadding(pad, pad, pad, pad);
-            box.setBackgroundColor(0xF0101010);
+            box.setBackgroundColor(0xF2121212);
+            box.setPadding((int)(8*dp), (int)(6*dp), (int)(8*dp), (int)(6*dp));
 
+            // ── 标题行 + 关闭 ──
+            LinearLayout top = new LinearLayout(act);
+            top.setOrientation(LinearLayout.HORIZONTAL);
             TextView title = new TextView(act);
             title.setText("GM 控制台");
             title.setTextColor(Color.WHITE);
-            title.setTextSize(TypedValue.COMPLEX_UNIT_SP, 18);
-            box.addView(title);
+            title.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16);
+            title.setLayoutParams(new LinearLayout.LayoutParams(0,
+                    ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+            top.addView(title);
+            Button x = new Button(act);
+            x.setText("关闭");
+            x.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
+            x.setOnClickListener(new View.OnClickListener() {
+                public void onClick(View v) {
+                    try { wm.removeView(sPanel); sPanel = null; } catch (Throwable ignored) {}
+                }
+            });
+            top.addView(x);
+            box.addView(top);
 
             TextView st = new TextView(act);
             st.setText(Srv.status());
             st.setTextColor(0xFF88FF88);
-            st.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
+            st.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11);
             box.addView(st);
 
-            addLabel(box, "切换出战角色（改完重开游戏）：");
+            // ── 角色：7 个一行 ──
+            addLabel(box, "出战角色（改完重开游戏）：");
+            LinearLayout row = new LinearLayout(act);
             String[] names = {"大娃", "二娃", "三娃", "四娃", "五娃", "六娃", "七娃"};
-            LinearLayout row = null;
             for (int i = 0; i < names.length; i++) {
-                if (i % 4 == 0) { row = new LinearLayout(act); box.addView(row); }
                 final int idx = i;
                 Button b = new Button(act);
                 b.setText(names[i]);
+                b.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11);
+                b.setPadding(0, 0, 0, 0);
+                b.setMinimumWidth(0);
+                b.setLayoutParams(new LinearLayout.LayoutParams(0,
+                        ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
                 b.setOnClickListener(new View.OnClickListener() {
                     public void onClick(View v) { toast(act, "已切换：" + Srv.setRole(idx) + "（请重开游戏）"); }
                 });
                 row.addView(b);
             }
+            box.addView(row);
 
-            addLabel(box, "自定义属性（0 或留空=不改）：");
-            final EditText a = num(act, box, "攻击");
-            final EditText d = num(act, box, "防御");
-            final EditText l = num(act, box, "生命");
-            final EditText c = num(act, box, "暴击率 0~1");
+            // ── 属性：4 个输入 + 应用 ──
+            addLabel(box, "自定义属性（留空=不改）：");
+            LinearLayout r2 = new LinearLayout(act);
+            r2.setOrientation(LinearLayout.HORIZONTAL);
+            final EditText eAtk = small(act, r2, "攻");
+            final EditText eDef = small(act, r2, "防");
+            final EditText eLife = small(act, r2, "血");
+            final EditText eCrit = small(act, r2, "暴击");
             Button ap = new Button(act);
-            ap.setText("应用属性");
+            ap.setText("应用");
+            ap.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11);
             ap.setOnClickListener(new View.OnClickListener() {
-                public void onClick(View v) { toast(act, "已应用：" + Srv.setStats(v(a), v(d), v(l), v(c))); }
+                public void onClick(View v) {
+                    toast(act, "已应用：" + Srv.setStats(v(eAtk), v(eDef), v(eLife), v(eCrit)));
+                }
             });
-            box.addView(ap);
+            r2.addView(ap);
+            box.addView(r2);
 
-            addLabel(box, "主线剧情：");
+            // ── 剧情 ──
             LinearLayout r3 = new LinearLayout(act);
+            r3.setOrientation(LinearLayout.HORIZONTAL);
             Button rp = new Button(act);
             rp.setText("重放剧情");
+            rp.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11);
+            rp.setLayoutParams(new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
             rp.setOnClickListener(new View.OnClickListener() {
                 public void onClick(View v) { toast(act, "已清零 " + Srv.resetStory() + " 关"); }
             });
             r3.addView(rp);
             Button rs = new Button(act);
             rs.setText("恢复全通关");
+            rs.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11);
+            rs.setLayoutParams(new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
             rs.setOnClickListener(new View.OnClickListener() {
                 public void onClick(View v) { toast(act, "已恢复 " + Srv.restoreStory() + " 关"); }
             });
             r3.addView(rs);
             box.addView(r3);
 
-            Button close = new Button(act);
-            close.setText("关闭");
-            close.setOnClickListener(new View.OnClickListener() {
-                public void onClick(View v) {
-                    try { wm.removeView(sPanel); sPanel = null; } catch (Throwable ignored) {}
-                }
-            });
-            box.addView(close);
-
-            ScrollView sv = new ScrollView(act);
-            sv.addView(box);
-
-            // 面板占满屏幕高度，避免内容被截断、无法滑动
             android.util.DisplayMetrics dm = act.getResources().getDisplayMetrics();
-            int w = (int) (dm.widthPixels * 0.92);
-            int h = (int) (dm.heightPixels * 0.88);
-            int flags = android.view.WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
-                    | android.view.WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
-                    | android.view.WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS;
+            int flags = android.view.WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL;
             android.view.WindowManager.LayoutParams lp =
                     new android.view.WindowManager.LayoutParams(
-                            w, h,
+                            (int) (dm.widthPixels * 0.96),
+                            ViewGroup.LayoutParams.WRAP_CONTENT,
                             android.os.Build.VERSION.SDK_INT >= 26
                                     ? android.view.WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
                                     : android.view.WindowManager.LayoutParams.TYPE_PHONE,
                             flags, android.graphics.PixelFormat.TRANSLUCENT);
             lp.gravity = Gravity.LEFT | Gravity.TOP;
             lp.x = 8;
-            lp.y = (int) (dm.heightPixels * 0.06);
-            sv.setFillViewport(true);
-            sv.setVerticalScrollBarEnabled(true);
-            sv.setSmoothScrollingEnabled(true);
-            wm.addView(sv, lp);
-            sPanel = sv;
-            Log.i(TAG, "GM 菜单已打开");
+            lp.y = (int) (dm.heightPixels * 0.05);
+            if (wm == null) wm = (android.view.WindowManager) act.getSystemService(Activity.WINDOW_SERVICE);
+            wm.addView(box, lp);
+            sPanel = box;
+            Log.i(TAG, "GM 菜单已打开（紧凑布局）");
         } catch (Throwable e) {
             Log.e(TAG, "panel fail", e);
             toast(act, "打开失败：" + e);
         }
+    }
+
+    /** 窄输入框 */
+    private static EditText small(Activity act, LinearLayout parent, String hint) {
+        EditText e = new EditText(act);
+        e.setHint(hint);
+        e.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
+        e.setTextColor(Color.WHITE);
+        e.setHintTextColor(0xFF999999);
+        e.setInputType(android.text.InputType.TYPE_CLASS_NUMBER
+                | android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL);
+        e.setLayoutParams(new LinearLayout.LayoutParams(0,
+                ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        parent.addView(e);
+        return e;
     }
 
     private static void addLabel(LinearLayout box, String t) {
@@ -231,16 +259,6 @@ public final class Gm {
         v.setText(t);
         v.setTextColor(0xFFBBBBBB);
         box.addView(v);
-    }
-
-    private static EditText num(Activity act, LinearLayout box, String hint) {
-        EditText e = new EditText(act);
-        e.setHint(hint);
-        e.setTextColor(Color.WHITE);
-        e.setInputType(android.text.InputType.TYPE_CLASS_NUMBER
-                | android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL);
-        box.addView(e);
-        return e;
     }
 
     private static double v(EditText e) {

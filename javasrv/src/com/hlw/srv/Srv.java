@@ -78,7 +78,6 @@ public final class Srv {
     }
 
     public static String status() {
-        return "服务器列表 HTTP " + Http.PORT + " / 协议 TCP " + Tcp.PORT
-                + "，当前角色 " + Store.sltRole();
+        return "服务端运行中 · 当前角色 " + Store.sltRole();
     }
 }
