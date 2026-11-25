@@ -45,6 +45,7 @@ public final class Gm {
 
     private static android.view.WindowManager wm;
     private static TextView sBtn;
+    private static View sPanel;
 
     private static void addButton(final Activity act) {
         // AIR 用 SurfaceView 渲染，普通 View 会被盖住 → 必须用系统悬浮窗（TYPE_APPLICATION_OVERLAY）
@@ -116,82 +117,106 @@ public final class Gm {
         }, 3000);
     }
 
+    /** GM 菜单：独立悬浮窗口，不依赖 Activity token（AIR 会重建 Activity，用 Dialog 必崩） */
     private static void panel(final Activity act) {
-        ScrollView sv = new ScrollView(act);
-        LinearLayout box = new LinearLayout(act);
-        box.setOrientation(LinearLayout.VERTICAL);
-        int pad = (int) (12 * act.getResources().getDisplayMetrics().density);
-        box.setPadding(pad, pad, pad, pad);
-        box.setBackgroundColor(0xF0101010);
+        try {
+            if (sPanel != null && sPanel.getParent() != null) {
+                wm.removeView(sPanel);
+                sPanel = null;
+                return;   // 再点一次收起
+            }
+            LinearLayout box = new LinearLayout(act);
+            box.setOrientation(LinearLayout.VERTICAL);
+            int pad = (int) (12 * act.getResources().getDisplayMetrics().density);
+            box.setPadding(pad, pad, pad, pad);
+            box.setBackgroundColor(0xF0101010);
 
-        TextView title = new TextView(act);
-        title.setText("GM 控制台");
-        title.setTextColor(Color.WHITE);
-        title.setTextSize(TypedValue.COMPLEX_UNIT_SP, 18);
-        box.addView(title);
+            TextView title = new TextView(act);
+            title.setText("GM 控制台");
+            title.setTextColor(Color.WHITE);
+            title.setTextSize(TypedValue.COMPLEX_UNIT_SP, 18);
+            box.addView(title);
 
-        TextView st = new TextView(act);
-        st.setText(Srv.status());
-        st.setTextColor(0xFF88FF88);
-        st.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
-        box.addView(st);
+            TextView st = new TextView(act);
+            st.setText(Srv.status());
+            st.setTextColor(0xFF88FF88);
+            st.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
+            box.addView(st);
 
-        addLabel(box, "\n切换出战角色（改完请重开游戏）：");
-        String[] names = {"大娃", "二娃", "三娃", "四娃", "五娃", "六娃", "七娃"};
-        LinearLayout row = null;
-        for (int i = 0; i < names.length; i++) {
-            if (i % 4 == 0) { row = new LinearLayout(act); box.addView(row); }
-            final int idx = i;
-            Button b = new Button(act);
-            b.setText(names[i]);
-            b.setOnClickListener(new View.OnClickListener() {
+            addLabel(box, "切换出战角色（改完重开游戏）：");
+            String[] names = {"大娃", "二娃", "三娃", "四娃", "五娃", "六娃", "七娃"};
+            LinearLayout row = null;
+            for (int i = 0; i < names.length; i++) {
+                if (i % 4 == 0) { row = new LinearLayout(act); box.addView(row); }
+                final int idx = i;
+                Button b = new Button(act);
+                b.setText(names[i]);
+                b.setOnClickListener(new View.OnClickListener() {
+                    public void onClick(View v) { toast(act, "已切换：" + Srv.setRole(idx) + "（请重开游戏）"); }
+                });
+                row.addView(b);
+            }
+
+            addLabel(box, "自定义属性（0 或留空=不改）：");
+            final EditText a = num(act, box, "攻击");
+            final EditText d = num(act, box, "防御");
+            final EditText l = num(act, box, "生命");
+            final EditText c = num(act, box, "暴击率 0~1");
+            Button ap = new Button(act);
+            ap.setText("应用属性");
+            ap.setOnClickListener(new View.OnClickListener() {
+                public void onClick(View v) { toast(act, "已应用：" + Srv.setStats(v(a), v(d), v(l), v(c))); }
+            });
+            box.addView(ap);
+
+            addLabel(box, "主线剧情：");
+            LinearLayout r3 = new LinearLayout(act);
+            Button rp = new Button(act);
+            rp.setText("重放剧情");
+            rp.setOnClickListener(new View.OnClickListener() {
+                public void onClick(View v) { toast(act, "已清零 " + Srv.resetStory() + " 关"); }
+            });
+            r3.addView(rp);
+            Button rs = new Button(act);
+            rs.setText("恢复全通关");
+            rs.setOnClickListener(new View.OnClickListener() {
+                public void onClick(View v) { toast(act, "已恢复 " + Srv.restoreStory() + " 关"); }
+            });
+            r3.addView(rs);
+            box.addView(r3);
+
+            Button close = new Button(act);
+            close.setText("关闭");
+            close.setOnClickListener(new View.OnClickListener() {
                 public void onClick(View v) {
-                    toast(act, "已切换：" + Srv.setRole(idx) + "（请重开游戏）");
+                    try { wm.removeView(sPanel); sPanel = null; } catch (Throwable ignored) {}
                 }
             });
-            row.addView(b);
+            box.addView(close);
+
+            ScrollView sv = new ScrollView(act);
+            sv.addView(box);
+
+            int flags = android.view.WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL;
+            android.view.WindowManager.LayoutParams lp =
+                    new android.view.WindowManager.LayoutParams(
+                            (int) (300 * act.getResources().getDisplayMetrics().density),
+                            (int) (420 * act.getResources().getDisplayMetrics().density),
+                            android.os.Build.VERSION.SDK_INT >= 26
+                                    ? android.view.WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+                                    : android.view.WindowManager.LayoutParams.TYPE_PHONE,
+                            flags, android.graphics.PixelFormat.TRANSLUCENT);
+            lp.gravity = Gravity.LEFT | Gravity.TOP;
+            lp.x = 12;
+            lp.y = 180;
+            if (wm == null) wm = (android.view.WindowManager) act.getSystemService(Activity.WINDOW_SERVICE);
+            wm.addView(sv, lp);
+            sPanel = sv;
+            Log.i(TAG, "GM 菜单已打开");
+        } catch (Throwable e) {
+            Log.e(TAG, "panel fail", e);
+            toast(act, "打开失败：" + e);
         }
-
-        addLabel(box, "\n自定义属性（0 或留空=不改）：");
-        final EditText a = num(act, box, "攻击");
-        final EditText d = num(act, box, "防御");
-        final EditText l = num(act, box, "生命");
-        final EditText c = num(act, box, "暴击率 0~1");
-        Button ap = new Button(act);
-        ap.setText("应用属性");
-        ap.setOnClickListener(new View.OnClickListener() {
-            public void onClick(View v) {
-                toast(act, "已应用：" + Srv.setStats(v(a), v(d), v(l), v(c)));
-            }
-        });
-        box.addView(ap);
-
-        addLabel(box, "\n主线剧情：");
-        LinearLayout r3 = new LinearLayout(act);
-        Button rp = new Button(act);
-        rp.setText("重放剧情");
-        rp.setOnClickListener(new View.OnClickListener() {
-            public void onClick(View v) { toast(act, "已清零 " + Srv.resetStory() + " 关"); }
-        });
-        r3.addView(rp);
-        Button rs = new Button(act);
-        rs.setText("恢复全通关");
-        rs.setOnClickListener(new View.OnClickListener() {
-            public void onClick(View v) { toast(act, "已恢复 " + Srv.restoreStory() + " 关"); }
-        });
-        r3.addView(rs);
-        box.addView(r3);
-
-        Button close = new Button(act);
-        close.setText("关闭");
-        box.addView(close);
-
-        sv.addView(box);
-        final AlertDialog dlg = new AlertDialog.Builder(act).setView(sv).create();
-        close.setOnClickListener(new View.OnClickListener() {
-            public void onClick(View v) { dlg.dismiss(); }
-        });
-        dlg.show();
     }
 
     private static void addLabel(LinearLayout box, String t) {
