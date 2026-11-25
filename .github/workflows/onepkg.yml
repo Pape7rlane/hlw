@@ -1,0 +1,52 @@
+name: Build OnePackage APK
+
+on:
+  push:
+    branches: [ onepkg, onepkg-key ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      # 原始游戏包：放到 Release 里，用变量 BASE_APK_URL 指向它（约 300MB，别进仓库）
+      - name: Fetch base APK
+        run: |
+          set -e
+          url="${{ vars.BASE_APK_URL }}"
+          if [ -z "$url" ]; then echo "缺少仓库变量 BASE_APK_URL"; exit 1; fi
+          python3 - "$url" base.apk <<'PY'
+          import urllib.request, sys
+          urllib.request.urlretrieve(sys.argv[1], sys.argv[2])
+          PY
+          ls -la base.apk
+
+      - name: Build
+        env:
+          BASE_APK: ${{ github.workspace }}/base.apk
+          OUT_APK: ${{ github.workspace }}/out/hlw_onepkg.apk
+          KS_BASE64: ${{ secrets.KS_BASE64 }}
+          KS_PASS: ${{ secrets.KS_PASS }}
+          KS_ALIAS: ${{ secrets.KS_ALIAS }}
+        run: |
+          set -e
+          apt-get -qq update >/dev/null 2>&1 || true
+          chmod +x inject/scripts/*.sh
+          bash inject/scripts/build.sh
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: onepkg-apk
+          path: out/*.apk
+          if-no-files-found: error
