@@ -1,28 +1,23 @@
+Package the standalone Python server that originally runs on a computer/Proot into a mobile app (Chaquopy with embedded CPython).
 
+After startup, it listens on the local machine:
 
-把原本跑在电脑/Proot 里的 Python 单机服务端，打包成手机 App（Chaquopy 内嵌 CPython）。
-
-启动后在本机监听：
-
-| 端口 | 用途 |
+| Port | Purpose |
 |---|---|
-| HTTP 8080 | 服务器列表、会话、配置、进关卡、战斗结算 |
-| TCP 9000 | 游戏二进制协议 |
+| HTTP 8080 | Server list, sessions, configuration, level entry, battle settlement |
+| TCP 9000 | Game binary protocol |
 
-游戏本体连的就是 `127.0.0.1`，所以装在同一台手机上即可。
+The game client connects to `127.0.0.1`, so it only needs to be installed on the same phone.
 
-## 编译
+## Build
 
-推送到 GitHub 后由 Actions 自动编译（见 `.github/workflows/build.yml`），
-产物在 Actions 页面的 **Artifacts → huluwa-localserver-apk**。
+After pushing to GitHub, it is automatically built by Actions (see `.github/workflows/build.yml`),
+The artifact is in **Artifacts → huluwa-localserver-apk** on the Actions page.
 
-> 第一次构建要下载 Gradle / Android SDK / Chaquopy 的 Python，大约 5-10 分钟。
+> The first build will download Gradle / Android SDK / Chaquopy's Python, taking approximately 5-10 minutes.
 
-## 结构
+## Structure
 
 ```
-app/src/main/python/      Python 服务端（server.py + 数据种子）
-app/src/main/java/...     MainActivity（启动界面）+ ServerService（前台服务跑 Python）
-```
-
-存档写在应用私有目录 `filesDir`（APK 内资源只读，首次启动会复制出来）。
+app/src/main/python/      Python server (server.py + data seeds)
+app/src/main/java/...     MainActivity (launch screen) + Ser
