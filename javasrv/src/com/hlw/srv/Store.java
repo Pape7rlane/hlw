@@ -189,6 +189,14 @@ public final class Store {
         m.put("friends", new ArrayList<Object>());
         m.put("loser", new ArrayList<Object>());
         m.put("special", new ArrayList<Object>());
+        List<Object> sk = new ArrayList<Object>();
+        for (int k : new int[]{0, 100, 200}) {
+            Map<String, Object> one = new LinkedHashMap<String, Object>();
+            one.put("id", "skill" + (k == 0 ? idx : k + idx));
+            one.put("lv", 98);
+            one.put("state", 1);
+            sk.add(one);
+        }
         m.put("skill", sk);
         m.put("grade", 6);
         m.put("deify", 0);
