@@ -158,33 +158,37 @@ public final class Store {
         m.put("showVIP", 1);
         m.put("headPic", "0");
         m.put("comboType", 0);
-        // 属性：可在 GM 面板里覆盖（custom 节点）
+        // 属性：全部使用客户端字段名（与 Python 版一致，缺字段会导致 startEnter 抛错）
         Map<String, Object> c = Json.obj(UD.get("custom"));
-        m.put("atk", Json.i(c.get("atk"), 4746));
-        m.put("def", Json.i(c.get("def"), 3818));
-        m.put("life", Json.i(c.get("life"), 68257));
-        m.put("speed", 10);
+        m.put("attack", c.containsKey("atk") ? c.get("atk") : Integer.valueOf(4746));
+        m.put("defence", c.containsKey("def") ? c.get("def") : Integer.valueOf(3818));
+        m.put("life", c.containsKey("life") ? c.get("life") : Integer.valueOf(147717));
+        m.put("realLife", c.containsKey("life") ? c.get("life") : Integer.valueOf(147717));
+        m.put("maxLife", c.containsKey("life") ? c.get("life") : Integer.valueOf(147717));
+        m.put("realMaxLife", c.containsKey("life") ? c.get("life") : Integer.valueOf(147717));
+        m.put("maxSpeed", Integer.valueOf(10));
         m.put("crit", c.containsKey("crit") ? c.get("crit") : Double.valueOf(0.09));
-        m.put("critFactor", c.containsKey("critFactor") ? c.get("critFactor") : Double.valueOf(1.38));
-        m.put("sDmgRdc", 0);
-        m.put("atk_factor", 1);
-        m.put("def_factor", 1);
-        m.put("speed_factor", 1);
-        m.put("crit_factor", 1);
-        m.put("life_factor", 1);
-        m.put("critFactor_factor", 1);
-        m.put("sDmgRdc_factor", 1);
-        // 武器外观：留空，避免把别的角色模型套上来（客户端按 roleid+武器类型拼名字）
-        m.put("extrsEquip", new ArrayList<Object>());
-        List<Object> sk = new ArrayList<Object>();
-        for (int k : new int[]{0, 100, 200}) {
-            Map<String, Object> s = new LinkedHashMap<String, Object>();
-            int id = (k == 0) ? idx : (k + idx);
-            s.put("id", "skill" + id);
-            s.put("lv", 98);
-            s.put("state", 1);
-            sk.add(s);
-        }
+        m.put("critHit", Double.valueOf(1.38));
+        m.put("critFactor", Double.valueOf(1));
+        m.put("critHitFactor", Double.valueOf(1));
+        m.put("attackFactor", Integer.valueOf(1));
+        m.put("defenceFactor", Integer.valueOf(1));
+        m.put("maxLifeFactor", Integer.valueOf(1));
+        m.put("maxSpeedFactor", Integer.valueOf(1));
+        m.put("sDmgRdc", Integer.valueOf(0));
+        m.put("sDmgRdcFactor", Integer.valueOf(1));
+        m.put("fightPower", Integer.valueOf(1200000));
+        m.put("frameRate", Integer.valueOf(1));
+        m.put("killPlayerNum", Integer.valueOf(0));
+        m.put("showPlayerNum", Integer.valueOf(8));
+        m.put("roleExtend", "{}");
+        m.put("groupName", "帮会名字");
+        m.put("props", new ArrayList<Object>());
+        m.put("blacklist", new ArrayList<Object>());
+        m.put("enemy", new ArrayList<Object>());
+        m.put("friends", new ArrayList<Object>());
+        m.put("loser", new ArrayList<Object>());
+        m.put("special", new ArrayList<Object>());
         m.put("skill", sk);
         m.put("grade", 6);
         m.put("deify", 0);
@@ -215,6 +219,37 @@ public final class Store {
         m.put("skill", sk);
         // 武器外观只保留属于本角色的，避免串模型
         m.put("props", filterProps(Json.arr(LAST_PLAYER.get("props")), idx));
+        // ★ r0 必须使用客户端字段名（attack/defence/critHit/fightPower/...），
+        //   缺任何一个，客户端 startEnter()→exit() 都会抛异常并被静默吞掉（表现为卡死）。
+        ensure(m, "attack",   c0(pick(m,"attack","atk"), 4746));
+        ensure(m, "defence",  c0(pick(m,"defence","def"), 3818));
+        ensure(m, "life",     c0(m.get("life"), 147717));
+        ensure(m, "realLife", c0(m.get("realLife"), 147717));
+        ensure(m, "maxLife",  c0(m.get("maxLife"), 147717));
+        ensure(m, "maxSpeed", c0(pick(m,"maxSpeed","speed"), 10));
+        ensure(m, "crit",     c0(m.get("crit"), 0.09));
+        ensure(m, "critHit",  c0(m.get("critHit"), 1.38));
+        ensure(m, "critFactor", c0(m.get("critFactor"), 1));
+        ensure(m, "critHitFactor", c0(m.get("critHitFactor"), 1));
+        ensure(m, "attackFactor", c0(pick(m,"attackFactor","atk_factor"), 1));
+        ensure(m, "defenceFactor", c0(pick(m,"defenceFactor","def_factor"), 1));
+        ensure(m, "maxLifeFactor", c0(pick(m,"maxLifeFactor","life_factor"), 1));
+        ensure(m, "maxSpeedFactor", c0(pick(m,"maxSpeedFactor","speed_factor"), 1));
+        ensure(m, "fightPower", c0(m.get("fightPower"), 1200000));
+        ensure(m, "frameRate", c0(m.get("frameRate"), 1));
+        ensure(m, "killPlayerNum", c0(m.get("killPlayerNum"), 0));
+        ensure(m, "comboType", c0(m.get("comboType"), 0));
+        ensure(m, "showPlayerNum", c0(m.get("showPlayerNum"), 8));
+        ensure(m, "hp", null);
+        m.remove("hp");
+        if (!(m.get("blacklist") instanceof List)) m.put("blacklist", new ArrayList<Object>());
+        if (!(m.get("enemy") instanceof List)) m.put("enemy", new ArrayList<Object>());
+        if (!(m.get("friends") instanceof List)) m.put("friends", new ArrayList<Object>());
+        if (!(m.get("loser") instanceof List)) m.put("loser", new ArrayList<Object>());
+        if (!(m.get("special") instanceof List)) m.put("special", new ArrayList<Object>());
+        if (!(m.get("roleExtend") instanceof String)) m.put("roleExtend", "{}");
+        if (!(m.get("groupName") instanceof String)) m.put("groupName", "帮会名字");
+
         // 自定义属性覆盖
         Map<String, Object> c = Json.obj(group("custom"));
         if (c.containsKey("atk")) m.put("attack", c.get("atk"));
@@ -222,6 +257,22 @@ public final class Store {
         if (c.containsKey("life")) { m.put("life", c.get("life")); m.put("realLife", c.get("life")); m.put("maxLife", c.get("life")); }
         if (c.containsKey("crit")) m.put("crit", c.get("crit"));
         return m;
+    }
+
+    private static Object c0(Object v, Object d) { return (v == null) ? d : v; }
+
+    /** 依次取第一个非 null 的键 */
+    private static Object pick(Map<String, Object> m, String... keys) {
+        for (String k : keys) {
+            Object v = m.get(k);
+            if (v != null) return v;
+        }
+        return null;
+    }
+
+    /** 字段不存在或为 null 时补默认值 */
+    private static void ensure(Map<String, Object> m, String k, Object d) {
+        if (!m.containsKey(k) || m.get(k) == null) m.put(k, d);
     }
 
     private static List<Object> filterProps(List<Object> props, int idx) {
