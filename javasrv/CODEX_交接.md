@@ -258,3 +258,72 @@ Log_.i("cb " + t + " resp=" + Json.write(payload));
 ```
 
 复现一次 1-2，对比这两行就能看出差在哪。
+
+---
+
+## 10. ★★★ v10 之后的结论（2026-11-25 12:5x，从这里继续）
+
+### 已确认的日志事实
+
+```
+cb 44444 info={"in_id":"1","roleid":"role0","roleidArr":["role0"],"gameType":0,"gr_id":"0"}
+cb 44444 resp={"msg":"ok","act":null,"returndata":{"next":{...}}}        (82B zlib)
+（之后：没有 CSLeaveLevel(612)，没有 CSLockLevel(604)，客户端界面卡死）
+```
+
+给 44444 无条件加上 `te.ta`（v10）后**仍然卡**，说明 `te` 不是关键。
+
+### 客户端代码路径（已读源码，`src/scripts/module/game/ui/GameHandler.as`）
+
+```
+checkResourcesUpdateHandler()  → gameRequest(44444, netParam, startEnter)
+gameRequestHandler()           → 解析应答 → try { startEnter() } catch(e:Error) {}   ← 异常被静默吞掉
+startEnter()                   → ... → exit(clearGameHandler)
+exit()                         → MainWorldFun.ExitGameLevel(exitGameLevelHandler)    ← 这里该发 612
+```
+
+**关键推论：卡住 = `startEnter()` 内部抛异常且被 `catch` 吞掉**，所以没有任何报错。
+异常点只可能在这几行（按出现顺序）：
+
+```as
+_loc1_ = _request.other                                   // ① other 是否为 null
+_loc4_ = _loc1_.slt ? _loc1_.slt : _request.netParam
+_loc1_.sltGroup  = int(_loc4_.gr_id)                      // ② _loc4_ 是否 null
+_loc1_.sltInstance = int(_loc4_.in_id)
+ChatRoomAll.getInstance().setGameType(_loc2_, _loc3_)
+SLControlModule.GetInstance().ReleaseUI()
+ModuleStateManager.getInstance().hideAllModule("PVP_UI")
+gameManager.SetState(16384, null)
+exit(clearGameHandler)                                    // ③ exit 内部
+```
+
+而 `gameRequestHandler()` 在调用 `startEnter` 前，会从 `returndata` 读这些字段：
+
+```as
+_loc7_.other.combineObject = _loc8_.combineObject;        // 我们没给 → undefined
+_loc7_.other.te           = _loc8_.te;                    // v10 已给
+_loc7_.other.returnData   = _loc8_.returnData;            // 条件性
+_loc7_.other.otherTotalPower = _loc8_.otherPower;
+_loc5_.algorithmName/algorithm/algorithmParam = _loc8_.xxx;  // 我们没给
+```
+
+### 下一轮要试的（按优先级，每次只改一处）
+
+1. **补 `combineObject`**（`returndata.combineObject = {}`）
+   —— 战斗初始化会读它，undefined 最容易在后续抛错
+2. **补 `algorithmName` / `algorithm` / `algorithmParam`**（给空串/空数组/空对象）
+3. **确认 `_request.other` 不为 null**：`other` 来自 `requestHandler` 的 upload 组装；
+   如果 44444 之前那次 `checkResourcesUpdateHandler` 被跳过，`other` 可能没建好。
+   排查法：在客户端日志（`/elog/l.php` 的 msg 字段）里找 `[GameHandler] startEnter` 是否出现——
+   **如果没出现，就是 startEnter 根本没进（_loc7_ 为 null）；如果出现但没到 exitGameLevelHandler，就是 exit 抛错。**
+   这个 trace 通过 `elog` 上报到我们的 `cb.php?type=elog`，服务端已经在打日志，把 `[CLIENT]` 行捞出来看即可。
+4. 若上面都不行，对照 Python 版：给 Python 版跑一次同一关卡，把 `[HTTP] 已发送 N 字节` 与 `cb.php` 的
+   完整 payload 打出来（Python 里临时加 `log(json.dumps(payload))`），逐字段 diff。
+
+### 最快的诊断手段（强烈建议先做）
+
+`GameHandler.as` 里每个步骤都有 `trace("[GameHandler] xxx")`，客户端会通过 `POST /elog/l.php` 上报。
+我们服务端 `Http.route()` 里 `if (lower.contains("elog"))` 分支已经把它们打进 logcat（`[CLIENT]` 前缀）。
+
+**所以：复现一次卡死，然后 `logcat -d | grep "\[CLIENT\]"`，就能直接看到客户端停在 startEnter 的哪一行。**
+这比任何猜测都快。

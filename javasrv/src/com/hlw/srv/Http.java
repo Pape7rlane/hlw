@@ -226,6 +226,22 @@ public final class Http {
                     next.put("in_id", "instance0");
                 }
                 if (!next.isEmpty()) rd.put("next", next);
+                // ★ startEnter() 会把 returndata.te 赋给 other.te，随后 exit() 读它；
+                //   缺 te 时异常被客户端 try/catch 静默吞掉 → 表现为"卡住不动"。
+                //   Python 版只在 gr_id>=2000 下发，但实测普通关卡也需要，先无条件给。
+                List<Object> ids = new ArrayList<Object>();
+                ids.add(Store.sltIndex());
+                Map<String, Object> ta = new LinkedHashMap<String, Object>();
+                ta.put("role", ids);
+                ta.put("master", Store.sltIndex());
+                ta.put("masterArr", ids);
+                ta.put("t", "2026-11-25 00:00:00");
+                ta.put("ceng", -1);
+                ta.put("id", g);
+                ta.put("prop", new LinkedHashMap<String, Object>());
+                Map<String, Object> te = new LinkedHashMap<String, Object>();
+                te.put("ta", ta);
+                rd.put("te", te);
                 out.put("returndata", rd);
                 Log_.i("进关卡 gr=" + g + " in=" + i + " next=" + Json.write(next));
                 break;
