@@ -1,4 +1,4 @@
-# 少年葫芦娃 · 单机服务端 APK
+
 
 把原本跑在电脑/Proot 里的 Python 单机服务端，打包成手机 App（Chaquopy 内嵌 CPython）。
 
