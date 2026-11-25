@@ -206,3 +206,55 @@ logcat -c; am start ...; sleep 20; logcat -d | grep -E "HLWGM|HLWSRV"
 | `7.war.r0` 硬编码 | 战斗缺字段 → 进关卡卡死 |
 
 细节全在 `交接文档.md`（755 行）里，遇到 AS3/协议问题先 grep 它。
+
+---
+
+## 9. ★★ 2026-11-25 11:44 实机日志定位（从这里开始，别重复排查）
+
+### 日志事实
+
+```
+11:44:06.908  锁关卡 gamelevel2000-0                    （主城）
+11:44:14.521  进关卡 pos=(127,82,-485) 已回 607+1265+1211  （主城正常）
+11:44:32.704  进关卡 gr=0 in=1 next={"gr_id":"group0","in_id":"instance2"}   ← 1-2 的 HTTP 应答
+（此后日志空白：没有 CSLeaveLevel(612)，也没有 CSLockLevel(604)，TCP 连接仍活着）
+```
+
+### 对照 Python 版同一流程
+
+```
+[03:42:54] [44444] 进关卡 gr=0 in=1 → next=...
+[03:42:54] [TCP] recv CSLeaveLevel      ← 客户端收到 44444 应答后立刻发这个
+[03:42:54] [TCP] send type=613
+```
+
+### 结论
+
+**问题不在 TCP，而在 `cb.php?type=44444` 的应答内容**：客户端拿到我们的应答后没有继续（不离开当前关卡、不请求下一关）。
+
+### 建议的三个实验（按顺序试，每个改一行）
+
+1. **给 44444 也下发 `te.ta`**（Python 只在 `gr_id >= 2000` 时给，但值得试）
+   `Http.java` 的 `case 44444:` 里无条件加：
+   ```java
+   Map<String,Object> ta = new LinkedHashMap<>();
+   ta.put("role", ids); ta.put("master", 0); ta.put("masterArr", ids);
+   ta.put("t", "2026-11-25 00:00:00"); ta.put("ceng", -1);
+   ta.put("id", g); ta.put("prop", new LinkedHashMap<>());
+   Map<String,Object> te = new LinkedHashMap<>();
+   te.put("ta", ta); rd.put("te", te);
+   ```
+2. **核对 `gr_id`/`in_id` 的数值 vs 字符串**：Python 用 `int(info["gr_id"])`，客户端可能传 `"group0"` 形态；
+   打印原始 `info` 全量 JSON 看清到底传了什么（现在只打印了解析后的 int）。
+3. **比对 44444 应答的字节数**：Python 是 149 字节。抓包/打印我们实际发出的 JSON 全文，逐字段对比。
+
+### 快速定位手段
+
+在 `Http.java` 的 cb 入口加一行，把**原始 info JSON** 和**最终 payload JSON** 都打进日志：
+
+```java
+Log_.i("cb " + t + " info=" + Json.write(info));
+Log_.i("cb " + t + " resp=" + Json.write(payload));
+```
+
+复现一次 1-2，对比这两行就能看出差在哪。
