@@ -36,15 +36,22 @@ public final class GmAuto {
     public static void start(final Activity act) {
         try {
             sAct = act;
-            Thread t = new Thread(new Runnable() {
-                public void run() {
-                    try { bootServer(act); } catch (Throwable e) { Log.e(TAG, "bootServer fail", e); }
-                }
-            }, "hlw-boot");
-            t.setDaemon(true);
-            t.start();
+            Log.i(TAG, "start: enter");
+            // Chaquopy 必须在主线程初始化，否则原生层会在 mutex 上崩（signal 6）
             act.runOnUiThread(new Runnable() {
-                public void run() { addGmButton(act); }
+                public void run() {
+                    try {
+                        Log.i(TAG, "start: ui thread, init python");
+                        if (!Python.isStarted()) {
+                            Python.start(new AndroidPlatform(act.getApplicationContext()));
+                        }
+                        Log.i(TAG, "start: python started");
+                        bootServer(act);
+                        addGmButton(act);
+                    } catch (Throwable e) {
+                        Log.e(TAG, "ui init fail", e);
+                    }
+                }
             });
         } catch (Throwable e) {
             Log.e(TAG, "start fail", e);
@@ -54,9 +61,6 @@ public final class GmAuto {
     private static void bootServer(Context ctx) {
         File dir = ctx.getFilesDir();
         if (!dir.exists()) dir.mkdirs();
-        if (!Python.isStarted()) {
-            Python.start(new AndroidPlatform(ctx.getApplicationContext()));
-        }
         PyObject mod = Python.getInstance().getModule("server");
         mod.callAttr("start_all", dir.getAbsolutePath());
         Log.i(TAG, "python server started, dir=" + dir.getAbsolutePath());
